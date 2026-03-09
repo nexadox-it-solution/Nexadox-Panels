@@ -33,6 +33,7 @@ interface Appointment {
   appointment_id: string;
   patient_name: string;
   patient_email: string | null;
+  patient_phone: string | null;
   doctor_id: number | null;
   clinic_id: number | null;
   appointment_date: string;

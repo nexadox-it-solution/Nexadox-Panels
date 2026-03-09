@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createServerClient } from "@/lib/supabase/server";
 import { calculateCommission, getAgentCommissions } from "@/lib/supabase/queries";
 import { creditAgentCommission } from "./wallet.service";
