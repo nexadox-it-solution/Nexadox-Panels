@@ -3,11 +3,13 @@ import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 /**
  * POST /api/patient/login
@@ -29,7 +31,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Find patient by email
-    const { data: patient, error } = await supabaseAdmin
+    const { data: patient, error } = await getSupabaseAdmin()
       .from("patients")
       .select("*")
       .eq("email", email.trim().toLowerCase())
@@ -43,7 +45,7 @@ export async function POST(req: NextRequest) {
 
     if (!patient) {
       // Also try case-insensitive match
-      const { data: patientCI } = await supabaseAdmin
+      const { data: patientCI } = await getSupabaseAdmin()
         .from("patients")
         .select("*")
         .ilike("email", email.trim())

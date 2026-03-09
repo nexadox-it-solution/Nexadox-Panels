@@ -2,11 +2,13 @@ export const dynamic = 'force-dynamic';
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 /**
  * GET /api/attendant/dashboard
@@ -19,7 +21,7 @@ export async function GET(_req: NextRequest) {
     // Parallel queries
     const [queueRes, checkinRes, completedRes, allCheckedIn] = await Promise.all([
       // Current queue (waiting)
-      supabaseAdmin
+      getSupabaseAdmin()
         .from("appointments")
         .select("id, token_number, patient_name, doctor_id, checkin_time, status, checkin_status")
         .eq("appointment_date", today)
@@ -28,21 +30,21 @@ export async function GET(_req: NextRequest) {
         .order("token_number", { ascending: true }),
 
       // Today's total check-ins count
-      supabaseAdmin
+      getSupabaseAdmin()
         .from("appointments")
         .select("id", { count: "exact", head: true })
         .eq("appointment_date", today)
         .not("checkin_time", "is", "null"),
 
       // Completed today count
-      supabaseAdmin
+      getSupabaseAdmin()
         .from("appointments")
         .select("id", { count: "exact", head: true })
         .eq("appointment_date", today)
         .eq("status", "completed"),
 
       // Recent check-ins (last 10)
-      supabaseAdmin
+      getSupabaseAdmin()
         .from("appointments")
         .select("id, token_number, patient_name, doctor_id, checkin_time, status, checkin_status")
         .eq("appointment_date", today)
@@ -58,7 +60,7 @@ export async function GET(_req: NextRequest) {
     const doctorIds = [...new Set([...queueItems, ...recentItems].filter(a => a.doctor_id).map(a => a.doctor_id))];
     let doctorMap: Record<number, string> = {};
     if (doctorIds.length > 0) {
-      const { data: docs } = await supabaseAdmin
+      const { data: docs } = await getSupabaseAdmin()
         .from("doctors")
         .select("id, name")
         .in("id", doctorIds);

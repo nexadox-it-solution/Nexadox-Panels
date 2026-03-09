@@ -3,11 +3,13 @@ import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 /**
  * POST /api/patient/set-password
@@ -40,7 +42,7 @@ export async function POST(req: NextRequest) {
     const hash = await bcrypt.hash(password, salt);
 
     // Update the patient record
-    const { error } = await supabaseAdmin
+    const { error } = await getSupabaseAdmin()
       .from("patients")
       .update({ password_hash: hash, updated_at: new Date().toISOString() })
       .eq("id", patient_id);

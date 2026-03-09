@@ -2,11 +2,13 @@ export const dynamic = 'force-dynamic';
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 /**
  * PATCH /api/admin/update-user
@@ -34,7 +36,7 @@ export async function PATCH(req: NextRequest) {
     // Update profiles table (primary source of truth)
     if (Object.keys(update).length > 0) {
       if (isUuid) {
-        const { error: profileErr } = await supabaseAdmin
+        const { error: profileErr } = await getSupabaseAdmin()
           .from("profiles")
           .update(update)
           .eq("id", user_id);
@@ -47,8 +49,8 @@ export async function PATCH(req: NextRequest) {
       try {
         const usersUpdate = { ...update };
         const { error: userErr } = isUuid
-          ? await supabaseAdmin.from("users").update(usersUpdate).eq("auth_user_id", user_id)
-          : await supabaseAdmin.from("users").update(usersUpdate).eq("id", user_id);
+          ? await getSupabaseAdmin().from("users").update(usersUpdate).eq("auth_user_id", user_id)
+          : await getSupabaseAdmin().from("users").update(usersUpdate).eq("id", user_id);
         if (userErr) {
           console.warn("Users table update warning:", userErr.message);
         }
@@ -72,7 +74,7 @@ export async function PATCH(req: NextRequest) {
       }
 
       if (Object.keys(attUpdate).length > 0) {
-        const { error: attErr } = await supabaseAdmin
+        const { error: attErr } = await getSupabaseAdmin()
           .from("attendants")
           .update(attUpdate)
           .eq("id", attendant_id);
@@ -106,23 +108,23 @@ export async function DELETE(req: NextRequest) {
     if (isUuid) {
       // Delete auth user — cascades to profiles via FK
       try {
-        await supabaseAdmin.auth.admin.deleteUser(user_id);
+        await getSupabaseAdmin().auth.admin.deleteUser(user_id);
       } catch (_e) { /* ok */ }
       // Also clean up users table
-      await supabaseAdmin.from("users").delete().eq("auth_user_id", user_id);
+      await getSupabaseAdmin().from("users").delete().eq("auth_user_id", user_id);
     } else {
       // Get auth_user_id from users table first
-      const { data: userRow } = await supabaseAdmin
+      const { data: userRow } = await getSupabaseAdmin()
         .from("users")
         .select("auth_user_id")
         .eq("id", user_id)
         .single();
       if (userRow?.auth_user_id) {
         try {
-          await supabaseAdmin.auth.admin.deleteUser(userRow.auth_user_id);
+          await getSupabaseAdmin().auth.admin.deleteUser(userRow.auth_user_id);
         } catch (_e) { /* ok */ }
       }
-      await supabaseAdmin.from("users").delete().eq("id", user_id);
+      await getSupabaseAdmin().from("users").delete().eq("id", user_id);
     }
 
     return NextResponse.json({ success: true });

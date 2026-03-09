@@ -2,11 +2,13 @@ export const dynamic = 'force-dynamic';
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 /* ─── Helpers ───────────────────────────────────────────────── */
 const genId = () =>
@@ -37,7 +39,7 @@ export async function GET(req: NextRequest) {
     const date = url.searchParams.get("date");             // YYYY-MM-DD (optional)
     const status = url.searchParams.get("status");         // e.g. "scheduled" (optional)
 
-    let query = supabaseAdmin
+    let query = getSupabaseAdmin()
       .from("appointments")
       .select("*")
       .order("created_at", { ascending: false })
@@ -93,18 +95,18 @@ export async function POST(req: NextRequest) {
     try {
       let existingPatient: any = null;
       if (patient_phone) {
-        const { data } = await supabaseAdmin.from("patients").select("id").eq("phone", patient_phone).limit(1).single();
+        const { data } = await getSupabaseAdmin().from("patients").select("id").eq("phone", patient_phone).limit(1).single();
         if (data) existingPatient = data;
       }
       if (!existingPatient && patient_email) {
-        const { data } = await supabaseAdmin.from("patients").select("id").eq("email", patient_email).limit(1).single();
+        const { data } = await getSupabaseAdmin().from("patients").select("id").eq("email", patient_email).limit(1).single();
         if (data) existingPatient = data;
       }
 
       if (existingPatient) {
         linkedPatientId = existingPatient.id;
       } else {
-        const { data: newPatient } = await supabaseAdmin
+        const { data: newPatient } = await getSupabaseAdmin()
           .from("patients")
           .insert({
             name: patient_name.trim(),
@@ -124,7 +126,7 @@ export async function POST(req: NextRequest) {
     let assignedToken: number | null = token_number || null;
     if (!assignedToken) {
       try {
-        let tokenQuery = supabaseAdmin
+        let tokenQuery = getSupabaseAdmin()
           .from("appointments")
           .select("token_number")
           .eq("doctor_id", doctor_id)
@@ -166,7 +168,7 @@ export async function POST(req: NextRequest) {
     let aptData: any = null;
     let aptError: any = null;
 
-    const { data: d1, error: e1 } = await supabaseAdmin
+    const { data: d1, error: e1 } = await getSupabaseAdmin()
       .from("appointments")
       .insert(insertPayload)
       .select("*")
@@ -176,7 +178,7 @@ export async function POST(req: NextRequest) {
       aptData = d1;
     } else {
       const { appointment_time, ...withoutTime } = insertPayload;
-      const { data: d2, error: e2 } = await supabaseAdmin
+      const { data: d2, error: e2 } = await getSupabaseAdmin()
         .from("appointments")
         .insert(withoutTime)
         .select("*")
@@ -213,7 +215,7 @@ export async function POST(req: NextRequest) {
       // Include token_number in voucher (column may not exist yet — graceful fallback)
       try {
         voucherPayload.token_number = assignedToken;
-        const { data: vData, error: vErr } = await supabaseAdmin
+        const { data: vData, error: vErr } = await getSupabaseAdmin()
           .from("vouchers")
           .insert(voucherPayload)
           .select("id")
@@ -221,7 +223,7 @@ export async function POST(req: NextRequest) {
         if (!vErr && vData) voucherId = vData.id;
         else {
           delete voucherPayload.token_number;
-          const { data: vData2, error: vErr2 } = await supabaseAdmin
+          const { data: vData2, error: vErr2 } = await getSupabaseAdmin()
             .from("vouchers")
             .insert(voucherPayload)
             .select("id")
@@ -231,7 +233,7 @@ export async function POST(req: NextRequest) {
         }
       } catch (ve) {
         delete voucherPayload.token_number;
-        const { data: vData3, error: vErr3 } = await supabaseAdmin
+        const { data: vData3, error: vErr3 } = await getSupabaseAdmin()
           .from("vouchers")
           .insert(voucherPayload)
           .select("id")
@@ -250,7 +252,7 @@ export async function POST(req: NextRequest) {
 
     try {
       const txnId = genTxn();
-      const { data: invData, error: invErr } = await supabaseAdmin
+      const { data: invData, error: invErr } = await getSupabaseAdmin()
         .from("invoices")
         .insert({
           txn_id: txnId,
@@ -278,7 +280,7 @@ export async function POST(req: NextRequest) {
 
     /* 5. CREATE TRANSACTION → attendant_transactions */
     try {
-      const { error: txnErr } = await supabaseAdmin.from("attendant_transactions").insert({
+      const { error: txnErr } = await getSupabaseAdmin().from("attendant_transactions").insert({
         txn_id: genTxn(),
         booking_id: appointmentId,
         user_name: patient_name.trim(),
@@ -297,7 +299,7 @@ export async function POST(req: NextRequest) {
     /* 6. UPDATE APPOINTMENT with voucher_id + invoice_id */
     if (voucherId || invoiceId) {
       try {
-        await supabaseAdmin
+        await getSupabaseAdmin()
           .from("appointments")
           .update({ voucher_id: voucherId, invoice_id: invoiceId })
           .eq("id", aptData.id);
@@ -330,7 +332,7 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "id and status required." }, { status: 400 });
     }
 
-    const { error } = await supabaseAdmin
+    const { error } = await getSupabaseAdmin()
       .from("appointments")
       .update({ status, updated_at: new Date().toISOString() })
       .eq("id", id);
@@ -338,13 +340,13 @@ export async function PATCH(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     if (status === "cancelled") {
-      const { data: apt } = await supabaseAdmin
+      const { data: apt } = await getSupabaseAdmin()
         .from("appointments")
         .select("voucher_id")
         .eq("id", id)
         .single();
       if (apt?.voucher_id) {
-        await supabaseAdmin
+        await getSupabaseAdmin()
           .from("vouchers")
           .update({ status: "cancelled" })
           .eq("id", apt.voucher_id);

@@ -2,11 +2,13 @@ export const dynamic = 'force-dynamic';
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 /**
  * GET /api/attendant/stats
@@ -17,7 +19,7 @@ export async function GET(req: NextRequest) {
     const today = new Date().toISOString().split("T")[0];
 
     // Patients currently in queue (checked_in + waiting)
-    const { count: queueCount } = await supabaseAdmin
+    const { count: queueCount } = await getSupabaseAdmin()
       .from("appointments")
       .select("id", { count: "exact", head: true })
       .eq("appointment_date", today)
@@ -25,7 +27,7 @@ export async function GET(req: NextRequest) {
       .eq("checkin_status", "checked_in");
 
     // Today's total check-ins
-    const { count: checkinCount } = await supabaseAdmin
+    const { count: checkinCount } = await getSupabaseAdmin()
       .from("appointments")
       .select("id", { count: "exact", head: true })
       .eq("appointment_date", today)

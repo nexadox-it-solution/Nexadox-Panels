@@ -2,10 +2,12 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}
 
 /**
  * GET /api/admin/reports?type=appointments|transactions|invoices|users
@@ -44,7 +46,7 @@ export async function GET(req: NextRequest) {
    Appointments Report
    ═══════════════════════════════════════════════════════════════ */
 async function getAppointmentsReport(dateFrom: string, dateTo: string, status: string, limit: number) {
-  let query = supabaseAdmin
+  let query = getSupabaseAdmin()
     .from("appointments")
     .select("id, appointment_id, patient_name, patient_email, patient_phone, doctor_id, clinic_id, appointment_date, appointment_time, slot, status, source_role, booking_amount, commission_amount, payable_amount, token_number, notes, created_at")
     .order("created_at", { ascending: false })
@@ -65,7 +67,7 @@ async function getAppointmentsReport(dateFrom: string, dateTo: string, status: s
   let clinicMap: Record<string, string> = {};
 
   if (doctorIds.length > 0) {
-    const { data: doctors } = await supabaseAdmin
+    const { data: doctors } = await getSupabaseAdmin()
       .from("doctors")
       .select("id, name")
       .in("id", doctorIds);
@@ -73,7 +75,7 @@ async function getAppointmentsReport(dateFrom: string, dateTo: string, status: s
   }
 
   if (clinicIds.length > 0) {
-    const { data: clinics } = await supabaseAdmin
+    const { data: clinics } = await getSupabaseAdmin()
       .from("clinics")
       .select("id, name")
       .in("id", clinicIds);
@@ -103,7 +105,7 @@ async function getTransactionsReport(dateFrom: string, dateTo: string, status: s
   const allRows: any[] = [];
 
   for (const { table, role } of tables) {
-    let query = supabaseAdmin
+    let query = getSupabaseAdmin()
       .from(table)
       .select("id, txn_id, booking_id, user_name, user_email, reason, amount, balance, status, started_on")
       .order("started_on", { ascending: false })
@@ -129,7 +131,7 @@ async function getTransactionsReport(dateFrom: string, dateTo: string, status: s
    Invoices Report
    ═══════════════════════════════════════════════════════════════ */
 async function getInvoicesReport(dateFrom: string, dateTo: string, limit: number) {
-  let query = supabaseAdmin
+  let query = getSupabaseAdmin()
     .from("invoices")
     .select("id, txn_id, booking_id, user_name, user_email, invoice_number, invoice_date, taxable_amount, gst, gst_percentage, total_amount, status, appointment_id, created_at")
     .order("invoice_date", { ascending: false })
@@ -148,7 +150,7 @@ async function getInvoicesReport(dateFrom: string, dateTo: string, limit: number
    Users Report (profiles + role counts)
    ═══════════════════════════════════════════════════════════════ */
 async function getUsersReport(dateFrom: string, dateTo: string, status: string, limit: number) {
-  let query = supabaseAdmin
+  let query = getSupabaseAdmin()
     .from("profiles")
     .select("id, name, email, phone, role, status, created_at")
     .order("created_at", { ascending: false })
@@ -161,7 +163,7 @@ async function getUsersReport(dateFrom: string, dateTo: string, status: string, 
   const { data, error } = await query;
   if (error) {
     // Fallback: try patients table if profiles doesn't exist
-    let pQuery = supabaseAdmin
+    let pQuery = getSupabaseAdmin()
       .from("patients")
       .select("id, name, email, phone, status, created_at")
       .order("created_at", { ascending: false })

@@ -2,11 +2,13 @@ export const dynamic = 'force-dynamic';
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 /**
  * POST /api/admin/upload-image
@@ -43,7 +45,7 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(arrayBuffer);
 
     // Upload using service role key (bypasses RLS)
-    const { error: uploadErr } = await supabaseAdmin.storage
+    const { error: uploadErr } = await getSupabaseAdmin().storage
       .from(bucket)
       .upload(fileName, buffer, {
         contentType: file.type,
@@ -59,7 +61,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Get public URL
-    const { data } = supabaseAdmin.storage.from(bucket).getPublicUrl(fileName);
+    const { data } = getSupabaseAdmin().storage.from(bucket).getPublicUrl(fileName);
     const url = data?.publicUrl || "";
 
     if (!url) {

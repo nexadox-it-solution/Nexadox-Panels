@@ -3,10 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+    process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+  );
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -35,7 +37,7 @@ export async function POST(req: NextRequest) {
     }
 
     /* ── 2. Get current wallet balance ───────────────────── */
-    const { data: agent, error: agErr } = await supabaseAdmin
+    const { data: agent, error: agErr } = await getSupabaseAdmin()
       .from("agents")
       .select("wallet_balance")
       .eq("id", agent_id)
@@ -52,7 +54,7 @@ export async function POST(req: NextRequest) {
     const newBalance = currentBalance + Number(amount);
 
     /* ── 3. Update wallet balance ────────────────────────── */
-    const { error: updateErr } = await supabaseAdmin
+    const { error: updateErr } = await getSupabaseAdmin()
       .from("agents")
       .update({ wallet_balance: newBalance, updated_at: new Date().toISOString() })
       .eq("id", agent_id);
@@ -69,13 +71,13 @@ export async function POST(req: NextRequest) {
     const txnId = "TXN" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
 
     /* Get agent profile name/email for transaction record */
-    const { data: agentProfile } = await supabaseAdmin
+    const { data: agentProfile } = await getSupabaseAdmin()
       .from("profiles")
       .select("name, email")
       .eq("id", String(agent_user_id))
       .single();
 
-    await supabaseAdmin.from("agent_transactions").insert({
+    await getSupabaseAdmin().from("agent_transactions").insert({
       txn_id: txnId,
       user_id: String(agent_user_id),
       user_name: agentProfile?.name || null,

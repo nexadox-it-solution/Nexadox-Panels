@@ -2,11 +2,13 @@ export const dynamic = 'force-dynamic';
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 /**
  * POST /api/attendant/checkin
@@ -41,7 +43,7 @@ export async function POST(req: NextRequest) {
     const today = new Date().toISOString().split("T")[0];
 
     /* ── 1. Get existing token from appointment (assigned at booking) ── */
-    const { data: existingApt } = await supabaseAdmin
+    const { data: existingApt } = await getSupabaseAdmin()
       .from("appointments")
       .select("token_number")
       .eq("id", appointment_id)
@@ -51,7 +53,7 @@ export async function POST(req: NextRequest) {
 
     // Fallback: if appointment was created before this change and has no token, generate one
     if (!existingToken) {
-      let tokenQuery = supabaseAdmin
+      let tokenQuery = getSupabaseAdmin()
         .from("appointments")
         .select("token_number")
         .eq("appointment_date", today)
@@ -77,7 +79,7 @@ export async function POST(req: NextRequest) {
     if (patient_dob) updatePayload.patient_dob = patient_dob;
     if (patient_gender) updatePayload.patient_gender = patient_gender;
 
-    const { error: aptErr } = await supabaseAdmin
+    const { error: aptErr } = await getSupabaseAdmin()
       .from("appointments")
       .update(updatePayload)
       .eq("id", appointment_id);
@@ -98,7 +100,7 @@ export async function POST(req: NextRequest) {
     if (temperature) vitalsPayload.temperature = temperature;
     if (pulse) vitalsPayload.pulse = pulse;
 
-    const { error: vErr } = await supabaseAdmin
+    const { error: vErr } = await getSupabaseAdmin()
       .from("vitals")
       .insert(vitalsPayload);
 
@@ -110,14 +112,14 @@ export async function POST(req: NextRequest) {
     /* ── 4. Insert into queue table ────────────────────────── */
     try {
       // Get appointment details for queue entry
-      const { data: aptData } = await supabaseAdmin
+      const { data: aptData } = await getSupabaseAdmin()
         .from("appointments")
         .select("patient_name, doctor_id, clinic_id")
         .eq("id", appointment_id)
         .single();
 
       if (aptData) {
-        await supabaseAdmin.from("queue").insert({
+        await getSupabaseAdmin().from("queue").insert({
           appointment_id,
           doctor_id: aptData.doctor_id,
           clinic_id: aptData.clinic_id,

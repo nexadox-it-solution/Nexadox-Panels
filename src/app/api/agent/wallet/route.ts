@@ -3,10 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+    process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+  );
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -36,7 +38,7 @@ export async function GET(req: NextRequest) {
     }
 
     /* ── 1. Get profile ──────────────────────────────────── */
-    const { data: profile } = await supabaseAdmin
+    const { data: profile } = await getSupabaseAdmin()
       .from("profiles")
       .select("id, name, email, phone, role")
       .eq("id", authUserId)
@@ -49,7 +51,7 @@ export async function GET(req: NextRequest) {
     /* ── 2. Get agent record ─────────────────────────────── */
     let agent: any = null;
 
-    const { data: byProfile } = await supabaseAdmin
+    const { data: byProfile } = await getSupabaseAdmin()
       .from("agents")
       .select("id, wallet_balance, commission_value, commission_type, wallet_earnings, total_bookings")
       .eq("profile_id", authUserId)
@@ -58,7 +60,7 @@ export async function GET(req: NextRequest) {
     if (byProfile) {
       agent = byProfile;
     } else {
-      const { data: byUser } = await supabaseAdmin
+      const { data: byUser } = await getSupabaseAdmin()
         .from("agents")
         .select("id, wallet_balance, commission_value, commission_type, wallet_earnings, total_bookings")
         .eq("user_id", authUserId)
@@ -71,7 +73,7 @@ export async function GET(req: NextRequest) {
     }
 
     /* ── 3. Get transactions ─────────────────────────────── */
-    const { data: txns } = await supabaseAdmin
+    const { data: txns } = await getSupabaseAdmin()
       .from("agent_transactions")
       .select("*")
       .eq("user_id", String(authUserId))

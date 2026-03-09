@@ -2,11 +2,13 @@ export const dynamic = 'force-dynamic';
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,7 +16,7 @@ export async function POST(req: NextRequest) {
     const { name, email, mobile, password, avatar, status, doctorPayload } = body;
 
     // ── STEP 1: Create auth user ──────────────────────────────
-    const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+    const { data: authData, error: authErr } = await getSupabaseAdmin().auth.admin.createUser({
       email: email.trim(),
       password,
       email_confirm: true,
@@ -26,7 +28,7 @@ export async function POST(req: NextRequest) {
     if (!userId) return NextResponse.json({ error: "Failed to create auth user." }, { status: 500 });
 
     // ── STEP 2: Upsert profiles (single source of truth) ─────
-    const { error: profileErr } = await supabaseAdmin
+    const { error: profileErr } = await getSupabaseAdmin()
       .from("profiles")
       .upsert({
         id: userId,
@@ -43,7 +45,7 @@ export async function POST(req: NextRequest) {
 
     // ── STEP 3: Backward-compat — insert into users table ────
     try {
-      await supabaseAdmin
+      await getSupabaseAdmin()
         .from("users")
         .insert({
           name: name.trim(),
@@ -56,7 +58,7 @@ export async function POST(req: NextRequest) {
     } catch (_e) { /* users table may not exist */ }
 
     // ── STEP 4: Insert into doctors detail table ──────────────
-    const { data: docData, error: docErr } = await supabaseAdmin
+    const { data: docData, error: docErr } = await getSupabaseAdmin()
       .from("doctors")
       .insert({
         auth_user_id: userId,
@@ -73,7 +75,7 @@ export async function POST(req: NextRequest) {
 
     if (docErr) {
       // Rollback: delete auth user (cascades to profile via FK)
-      await supabaseAdmin.auth.admin.deleteUser(userId);
+      await getSupabaseAdmin().auth.admin.deleteUser(userId);
       return NextResponse.json({ error: docErr.message }, { status: 400 });
     }
 

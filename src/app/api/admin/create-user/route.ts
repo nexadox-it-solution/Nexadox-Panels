@@ -2,11 +2,13 @@ export const dynamic = 'force-dynamic';
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 /**
  * POST /api/admin/create-user
@@ -47,7 +49,7 @@ export async function POST(req: NextRequest) {
     let authUserId: string;
 
     const { data: authData, error: authErr } =
-      await supabaseAdmin.auth.admin.createUser({
+      await getSupabaseAdmin().auth.admin.createUser({
         email: email.trim(),
         password,
         email_confirm: true,
@@ -61,7 +63,7 @@ export async function POST(req: NextRequest) {
         authErr.message?.toLowerCase().includes("registered") ||
         authErr.message?.toLowerCase().includes("exists")
       ) {
-        const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+        const { data: listData } = await getSupabaseAdmin().auth.admin.listUsers();
         const existingAuth = listData?.users?.find(
           (u: any) => u.email?.toLowerCase() === email.trim().toLowerCase()
         );
@@ -72,7 +74,7 @@ export async function POST(req: NextRequest) {
           );
         }
         authUserId = existingAuth.id;
-        await supabaseAdmin.auth.admin.updateUserById(authUserId, {
+        await getSupabaseAdmin().auth.admin.updateUserById(authUserId, {
           password,
           user_metadata: { name: name.trim(), role },
         });
@@ -87,7 +89,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── STEP 2: Upsert into profiles (single source of truth) ─
-    const { error: profileErr } = await supabaseAdmin
+    const { error: profileErr } = await getSupabaseAdmin()
       .from("profiles")
       .upsert(
         {
@@ -109,7 +111,7 @@ export async function POST(req: NextRequest) {
     // ── STEP 3: Backward-compat — upsert into users table ────
     let userId: number | null = null;
     try {
-      const { data: existingUser } = await supabaseAdmin
+      const { data: existingUser } = await getSupabaseAdmin()
         .from("users")
         .select("id")
         .eq("auth_user_id", authUserId)
@@ -117,7 +119,7 @@ export async function POST(req: NextRequest) {
 
       if (existingUser) {
         userId = existingUser.id;
-        await supabaseAdmin
+        await getSupabaseAdmin()
           .from("users")
           .update({
             name: name.trim(),
@@ -127,7 +129,7 @@ export async function POST(req: NextRequest) {
           })
           .eq("id", userId);
       } else {
-        const { data: byEmail } = await supabaseAdmin
+        const { data: byEmail } = await getSupabaseAdmin()
           .from("users")
           .select("id")
           .eq("email", email.trim())
@@ -135,7 +137,7 @@ export async function POST(req: NextRequest) {
 
         if (byEmail) {
           userId = byEmail.id;
-          await supabaseAdmin
+          await getSupabaseAdmin()
             .from("users")
             .update({
               name: name.trim(),
@@ -146,7 +148,7 @@ export async function POST(req: NextRequest) {
             })
             .eq("id", userId);
         } else {
-          const { data: userData } = await supabaseAdmin
+          const { data: userData } = await getSupabaseAdmin()
             .from("users")
             .insert({
               name: name.trim(),
@@ -171,7 +173,7 @@ export async function POST(req: NextRequest) {
 
     if (role === "admin") {
       // Insert into admin_details
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await getSupabaseAdmin()
         .from("admin_details")
         .upsert({ user_id: authUserId }, { onConflict: "user_id" })
         .select("*")
@@ -188,7 +190,7 @@ export async function POST(req: NextRequest) {
       if (rolePayload?.blood_group) pi.blood_group = rolePayload.blood_group;
       if (rolePayload?.city) pi.city = rolePayload.city;
 
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await getSupabaseAdmin()
         .from("patients")
         .insert(pi)
         .select("id")
@@ -197,7 +199,7 @@ export async function POST(req: NextRequest) {
       roleError = error;
     } else if (role === "agent") {
       // Check if already exists
-      const { data: existing } = await supabaseAdmin
+      const { data: existing } = await getSupabaseAdmin()
         .from("agents")
         .select("id")
         .eq("profile_id", authUserId)
@@ -206,7 +208,7 @@ export async function POST(req: NextRequest) {
       if (existing) {
         roleData = existing;
       } else {
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await getSupabaseAdmin()
           .from("agents")
           .insert({
             user_id: authUserId,
@@ -232,14 +234,14 @@ export async function POST(req: NextRequest) {
         .filter((id: number) => !isNaN(id));
 
       // Check if attendant already exists
-      const { data: existingAtt } = await supabaseAdmin
+      const { data: existingAtt } = await getSupabaseAdmin()
         .from("attendants")
         .select("id")
         .eq("profile_id", authUserId)
         .single();
 
       if (existingAtt) {
-        await supabaseAdmin
+        await getSupabaseAdmin()
           .from("attendants")
           .update({
             assigned_doctors: doctorIds,
@@ -248,7 +250,7 @@ export async function POST(req: NextRequest) {
           .eq("id", existingAtt.id);
         roleData = existingAtt;
       } else {
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await getSupabaseAdmin()
           .from("attendants")
           .insert({
             user_id: authUserId,

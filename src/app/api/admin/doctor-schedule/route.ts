@@ -3,25 +3,27 @@ import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 // v4 — session-based scheduling with max_seats support
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 /* ─── helper: delete matching rows then insert ──────────────── */
 type Row = Record<string, unknown>;
 
 async function deleteAndInsert(rows: Row[]): Promise<{ data: unknown[] | null; error: string | null }> {
   for (const r of rows) {
-    await supabaseAdmin
+    await getSupabaseAdmin()
       .from("doctor_schedules")
       .delete()
       .eq("doctor_id", r.doctor_id as string)
       .eq("date", r.date as string)
       .eq("slot", r.slot as string);
   }
-  const { data, error } = await supabaseAdmin.from("doctor_schedules").insert(rows).select();
+  const { data, error } = await getSupabaseAdmin().from("doctor_schedules").insert(rows).select();
   return { data: data ?? null, error: error?.message ?? null };
 }
 
@@ -36,7 +38,7 @@ async function saveRows(rows: Row[]): Promise<{
   const stripBoth     = (r: Row) => { const { clinic_id: _c, max_seats: _m, ...rest } = r; return rest; };
 
   // Strategy 1: plain insert with all columns
-  const { data: d1, error: e1 } = await supabaseAdmin.from("doctor_schedules").insert(rows).select();
+  const { data: d1, error: e1 } = await getSupabaseAdmin().from("doctor_schedules").insert(rows).select();
   if (!e1 && d1) return { data: d1, error: null };
 
   const errMsg = e1?.message ?? "";
@@ -50,17 +52,17 @@ async function saveRows(rows: Row[]): Promise<{
 
   // Strategy 3: strip clinic_id only
   const rowsNoCli = rows.map(stripClinic);
-  const { data: d3, error: e3 } = await supabaseAdmin.from("doctor_schedules").insert(rowsNoCli).select();
+  const { data: d3, error: e3 } = await getSupabaseAdmin().from("doctor_schedules").insert(rowsNoCli).select();
   if (!e3 && d3) return { data: d3, error: null, warning: "clinic_id column may not exist — run migration SQL." };
 
   // Strategy 4: strip max_seats only
   const rowsNoSeats = rows.map(stripSeats);
-  const { data: d4, error: e4 } = await supabaseAdmin.from("doctor_schedules").insert(rowsNoSeats).select();
+  const { data: d4, error: e4 } = await getSupabaseAdmin().from("doctor_schedules").insert(rowsNoSeats).select();
   if (!e4 && d4) return { data: d4, error: null, warning: "max_seats column may not exist — run migration SQL." };
 
   // Strategy 5: strip both clinic_id + max_seats
   const rowsBare = rows.map(stripBoth);
-  const { data: d5, error: e5 } = await supabaseAdmin.from("doctor_schedules").insert(rowsBare).select();
+  const { data: d5, error: e5 } = await getSupabaseAdmin().from("doctor_schedules").insert(rowsBare).select();
   if (!e5 && d5) return { data: d5, error: null, warning: "clinic_id & max_seats columns missing — run migration SQL." };
 
   // Strategy 6: duplicate on any stripped variant — delete+reinsert bare
@@ -113,7 +115,7 @@ export async function DELETE(req: NextRequest) {
     const { id } = (await req.json()) as { id: string };
     if (!id) return NextResponse.json({ error: "id is required." }, { status: 400 });
 
-    const { error } = await supabaseAdmin.from("doctor_schedules").delete().eq("id", id);
+    const { error } = await getSupabaseAdmin().from("doctor_schedules").delete().eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
     return NextResponse.json({ success: true });
@@ -135,7 +137,7 @@ export async function PATCH(req: NextRequest) {
     if (Object.keys(updates).length === 0)
       return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
 
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await getSupabaseAdmin()
       .from("doctor_schedules")
       .update(updates)
       .eq("id", id)
@@ -160,7 +162,7 @@ export async function GET(req: NextRequest) {
     if (!doctorId)
       return NextResponse.json({ error: "doctor_id is required." }, { status: 400 });
 
-    let query = supabaseAdmin
+    let query = getSupabaseAdmin()
       .from("doctor_schedules")
       .select("*")
       .eq("doctor_id", doctorId)
@@ -176,7 +178,7 @@ export async function GET(req: NextRequest) {
     /* Enrich each schedule row with booked_count for the session */
     const enriched = [];
     for (const row of (data || [])) {
-      const { count } = await supabaseAdmin
+      const { count } = await getSupabaseAdmin()
         .from("appointments")
         .select("*", { count: "exact", head: true })
         .eq("doctor_id", doctorId)

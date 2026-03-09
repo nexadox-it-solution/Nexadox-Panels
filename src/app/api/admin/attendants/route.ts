@@ -2,11 +2,13 @@ export const dynamic = 'force-dynamic';
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 /**
  * GET /api/admin/attendants
@@ -16,7 +18,7 @@ const supabaseAdmin = createClient(
 export async function GET() {
   try {
     // 1. Get all profiles with role = 'attendant'
-    const { data: profiles, error: profileErr } = await supabaseAdmin
+    const { data: profiles, error: profileErr } = await getSupabaseAdmin()
       .from("profiles")
       .select("id, role, name, email, phone, status, created_at")
       .eq("role", "attendant")
@@ -27,7 +29,7 @@ export async function GET() {
     }
 
     // 2. Get all attendant detail rows
-    const { data: attRows } = await supabaseAdmin
+    const { data: attRows } = await getSupabaseAdmin()
       .from("attendants")
       .select("*")
       .order("created_at", { ascending: false });
@@ -93,7 +95,7 @@ export async function DELETE(req: Request) {
 
     // Delete attendant detail row
     if (attendant_id) {
-      await supabaseAdmin.from("attendants").delete().eq("id", attendant_id);
+      await getSupabaseAdmin().from("attendants").delete().eq("id", attendant_id);
     }
 
     // Delete auth user (cascades to profiles via FK, which cascades to attendants via FK)
@@ -101,12 +103,12 @@ export async function DELETE(req: Request) {
       const isUuid = typeof user_id === "string" && user_id.includes("-");
       if (isUuid) {
         try {
-          await supabaseAdmin.auth.admin.deleteUser(user_id);
+          await getSupabaseAdmin().auth.admin.deleteUser(user_id);
         } catch (_e) {
           /* ok */
         }
         // Clean up users table (backward compat)
-        await supabaseAdmin.from("users").delete().eq("auth_user_id", user_id);
+        await getSupabaseAdmin().from("users").delete().eq("auth_user_id", user_id);
       }
     }
 
