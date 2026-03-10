@@ -19,8 +19,8 @@ export async function GET(req: NextRequest) {
       // Try to get user from auth cookies (SSR)
       const response = NextResponse.next();
       const supabaseSSR = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        (process.env.NEXT_PUBLIC_SUPABASE_URL || ""),
+        (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""),
         {
           cookies: {
             get(name: string) { return req.cookies.get(name)?.value; },

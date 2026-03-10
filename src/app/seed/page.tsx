@@ -1,17 +1,30 @@
-export const dynamic = 'force-dynamic';
-import { seedDatabase } from "@/lib/seedDatabase";
+"use client";
+
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 
-const SeedPage = async () => {
+const SeedPage = () => {
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [message, setMessage] = useState("");
+
   const handleSeed = async () => {
-    "use server";
+    setStatus("loading");
+    setMessage("");
     try {
-      const result = await seedDatabase();
-      console.log("Seeding result:", result);
+      const res = await fetch("/api/seed", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setStatus("success");
+        setMessage("Database seeded successfully!");
+      } else {
+        setStatus("error");
+        setMessage(data.message || "Seeding failed.");
+      }
     } catch (error) {
-      console.error("Seeding error:", error);
+      setStatus("error");
+      setMessage("Network error. Please try again.");
     }
   };
 
@@ -25,11 +38,18 @@ const SeedPage = async () => {
           <p className="text-sm text-muted-foreground">
             Click the button below to populate the Supabase database with mock data.
           </p>
-          <form action={handleSeed}>
-            <Button type="submit" className="w-full bg-brand-600 hover:bg-brand-700">
-              Seed Database
-            </Button>
-          </form>
+          <Button
+            onClick={handleSeed}
+            disabled={status === "loading"}
+            className="w-full bg-brand-600 hover:bg-brand-700"
+          >
+            {status === "loading" ? "Seeding..." : "Seed Database"}
+          </Button>
+          {message && (
+            <p className={`text-sm ${status === "success" ? "text-green-600" : "text-red-600"}`}>
+              {message}
+            </p>
+          )}
           <Link href="/admin">
             <Button variant="outline" className="w-full">
               Go to Admin Panel
