@@ -59,6 +59,10 @@ export default function LoginPage() {
       }
 
       const route = ROLE_ROUTES[profile.role] ?? "/admin";
+
+      // Set role cookie for middleware routing (7-day expiry, refreshed on each login)
+      document.cookie = `nexadox-role=${profile.role}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+
       window.location.replace(route);
     } catch (err: any) {
       setError(err?.message || "Login failed. Check your credentials.");

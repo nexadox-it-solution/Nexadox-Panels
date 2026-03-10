@@ -13,7 +13,7 @@ const roleBasedRoutes = {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow public routes and all API routes (API routes use service role key)
+  // Allow public routes and all API routes
   if (
     pathname.startsWith("/auth") ||
     pathname.startsWith("/_next") ||
@@ -32,8 +32,43 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Create a response we can modify (to forward cookie changes)
-  let response = NextResponse.next({ request });
+  // ── Step 1: Quick cookie-existence check (no API call) ──
+  // If no Supabase auth cookie exists at all, the user is definitely not logged in
+  const hasAuthCookie = request.cookies.getAll().some(
+    (c) => c.name.startsWith("sb-") && c.name.includes("auth-token")
+  );
+
+  if (!hasAuthCookie) {
+    const redirectUrl = new URL("/auth/login", request.url);
+    redirectUrl.searchParams.set("redirect", pathname);
+    return NextResponse.redirect(redirectUrl);
+  }
+
+  // ── Step 2: Role-based routing via lightweight role cookie ──
+  const userRole = request.cookies.get("nexadox-role")?.value;
+
+  if (userRole) {
+    const allowedRoutes =
+      roleBasedRoutes[userRole as keyof typeof roleBasedRoutes] || [];
+
+    const isAccessingProtectedRoute = Object.values(roleBasedRoutes)
+      .flat()
+      .some((route) => pathname.startsWith(route));
+
+    if (isAccessingProtectedRoute) {
+      const hasAccess = allowedRoutes.some((route) =>
+        pathname.startsWith(route)
+      );
+      if (!hasAccess) {
+        const userDashboard = allowedRoutes[0] || "/";
+        return NextResponse.redirect(new URL(userDashboard, request.url));
+      }
+    }
+  }
+
+  // ── Step 3: Refresh tokens in background (best-effort, never blocks) ──
+  // This keeps the auth cookies fresh without affecting navigation
+  const response = NextResponse.next({ request });
 
   try {
     const supabase = createServerClient(
@@ -46,92 +81,25 @@ export async function middleware(request: NextRequest) {
           },
           set(name: string, value: string, options: CookieOptions) {
             request.cookies.set({ name, value, ...options });
-            response = NextResponse.next({
-              request: { headers: request.headers },
-            });
             response.cookies.set({ name, value, ...options });
           },
           remove(name: string, options: CookieOptions) {
             request.cookies.set({ name, value: "", ...options });
-            response = NextResponse.next({
-              request: { headers: request.headers },
-            });
             response.cookies.set({ name, value: "", ...options });
           },
         },
       }
     );
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    // Redirect to login if not authenticated
-    if (userError || !user) {
-      const redirectUrl = new URL("/auth/login", request.url);
-      redirectUrl.searchParams.set("redirect", pathname);
-      return NextResponse.redirect(redirectUrl);
-    }
-
-    // Get user role from profiles (with timeout protection)
-    let userRole: string | null = null;
-    let userStatus: string = "active";
-
-    try {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role, status")
-        .eq("id", user.id)
-        .single();
-
-      if (profile) {
-        userRole = profile.role;
-        userStatus = profile.status || "active";
-      }
-    } catch {
-      // If profile query fails (network/RLS/timeout), allow access
-      // rather than locking the user out — page-level checks will handle it
-      return response;
-    }
-
-    if (!userRole) {
-      // User authenticated but no profile — allow through,
-      // page-level code will handle missing profile gracefully
-      return response;
-    }
-
-    // Check if user is active
-    if (userStatus !== "active") {
-      return NextResponse.redirect(new URL("/auth/login", request.url));
-    }
-
-    // Check role-based access
-    const allowedRoutes = roleBasedRoutes[userRole as keyof typeof roleBasedRoutes] || [];
-
-    const isAccessingProtectedRoute = Object.values(roleBasedRoutes)
-      .flat()
-      .some((route) => pathname.startsWith(route));
-
-    if (isAccessingProtectedRoute) {
-      const hasAccess = allowedRoutes.some((route) =>
-        pathname.startsWith(route)
-      );
-
-      if (!hasAccess) {
-        const userDashboard = allowedRoutes[0] || "/";
-        return NextResponse.redirect(new URL(userDashboard, request.url));
-      }
-    }
-
-    return response;
-  } catch (error) {
-    // On any unexpected error, allow the request through rather than
-    // redirecting to login — this prevents transient errors from logging
-    // users out. Page-level auth checks provide a second safety net.
-    console.error("Middleware error:", error);
-    return NextResponse.next();
+    // This refreshes expired access tokens and updates cookies via the handlers above.
+    // We intentionally ignore the result — auth decisions are based on cookie existence,
+    // not on this API call, so transient failures don't redirect users to login.
+    await supabase.auth.getUser();
+  } catch {
+    // Token refresh failed — not critical. The browser client will retry.
   }
+
+  return response;
 }
 
 export const config = {

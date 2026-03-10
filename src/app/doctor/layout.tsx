@@ -259,6 +259,7 @@ export default function DoctorLayout({
               title={sidebarCollapsed ? "Logout" : ""}
               onClick={async () => {
                 await supabase.auth.signOut();
+                document.cookie = "nexadox-role=; path=/; max-age=0";
                 window.location.href = "/auth/login";
               }}
             >

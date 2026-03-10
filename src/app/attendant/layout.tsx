@@ -197,6 +197,7 @@ export default function AttendantLayout({
               className="w-full justify-start gap-3"
               onClick={async () => {
                 await supabase.auth.signOut();
+                document.cookie = "nexadox-role=; path=/; max-age=0";
                 window.location.href = "/auth/login";
               }}
             >

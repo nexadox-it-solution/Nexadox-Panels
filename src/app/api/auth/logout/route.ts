@@ -10,9 +10,12 @@ export async function GET() {
   const supabase = createClient();
   await supabase.auth.signOut();
 
-  return NextResponse.redirect(
+  const response = NextResponse.redirect(
     new URL("/auth/login", process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000")
   );
+  // Clear the role cookie
+  response.cookies.set("nexadox-role", "", { path: "/", maxAge: 0 });
+  return response;
 }
 
 /**
@@ -27,5 +30,7 @@ export async function POST() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true });
+  const response = NextResponse.json({ success: true });
+  response.cookies.set("nexadox-role", "", { path: "/", maxAge: 0 });
+  return response;
 }
