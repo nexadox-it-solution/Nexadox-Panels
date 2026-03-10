@@ -10,7 +10,9 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-const supabase = createClient();
+function getSupabase() {
+  return createClient();
+}
 
 const ROLE_ROUTES: Record<string, string> = {
   admin:     "/admin",
@@ -33,7 +35,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+      const { data: authData, error: authErr } = await getSupabase().auth.signInWithPassword({
         email: email.trim(),
         password,
       });
@@ -42,7 +44,7 @@ export default function LoginPage() {
       const authId = authData.user.id;
 
       // SINGLE SOURCE OF TRUTH: profiles table only
-      const { data: profile, error: profileErr } = await supabase
+      const { data: profile, error: profileErr } = await getSupabase()
         .from("profiles")
         .select("role, status")
         .eq("id", authId)

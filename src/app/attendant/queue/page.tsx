@@ -8,7 +8,9 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-const supabase = createClient();
+function getSupabase() {
+  return createClient();
+}
 
 /* ─── Types ─────────────────────────────────────────────────── */
 interface QueueItem {
@@ -61,7 +63,7 @@ export default function QueueDisplayPage() {
       const today = new Date().toISOString().split("T")[0];
 
       /* Checked-in (waiting) patients */
-      const { data: waiting } = await supabase
+      const { data: waiting } = await getSupabase()
         .from("appointments")
         .select("*")
         .eq("appointment_date", today)
@@ -69,7 +71,7 @@ export default function QueueDisplayPage() {
         .order("checkin_time", { ascending: true });
 
       /* Today's completed consultations */
-      const { data: done } = await supabase
+      const { data: done } = await getSupabase()
         .from("appointments")
         .select("*")
         .eq("appointment_date", today)
@@ -84,7 +86,7 @@ export default function QueueDisplayPage() {
       /* Fetch doctor names */
       const docIds = [...new Set(all.filter(a => a.doctor_id).map(a => a.doctor_id))];
       if (docIds.length) {
-        const { data: docs } = await supabase.from("doctors").select("id, name").in("id", docIds);
+        const { data: docs } = await getSupabase().from("doctors").select("id, name").in("id", docIds);
         if (docs) {
           const m: Record<number, string> = {};
           docs.forEach(d => { m[d.id] = d.name; });
