@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Heart, Eye, EyeOff, Loader, AlertCircle,
+  Eye, EyeOff, Loader, AlertCircle,
   Calendar, Users, Shield, Stethoscope, Clock
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -155,8 +155,8 @@ export default function LoginPage() {
 
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-8">
             <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-brand-600 to-brand-700 rounded-2xl mb-4 shadow-lg shadow-brand-200">
-                <Heart className="h-7 w-7 text-white" fill="white" />
+              <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-brand-600 to-brand-700 rounded-2xl mb-4 shadow-lg shadow-brand-200 overflow-hidden">
+                <img src="/Nexadox.png" alt="Nexadox" className="h-10 w-10 object-contain" />
               </div>
               <h2 className="text-2xl font-bold text-slate-900">Welcome Back</h2>
               <p className="text-sm text-slate-500 mt-1">Sign in to your dashboard</p>

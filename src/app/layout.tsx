@@ -12,6 +12,10 @@ const poppins = Poppins({
 export const metadata = {
   title: "Nexadox - Modern Doctor Booking & Clinic Management",
   description: "Professional SaaS platform for clinic management and doctor appointments",
+  icons: {
+    icon: "/Nexadox.png",
+    apple: "/Nexadox.png",
+  },
 };
 
 export default function RootLayout({
