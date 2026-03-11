@@ -63,6 +63,14 @@ export default function LoginPage() {
       // Set role cookie for middleware routing (7-day expiry, refreshed on each login)
       document.cookie = `nexadox-role=${profile.role}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
 
+      // Verify auth cookies were set by the Supabase browser client before navigating.
+      // createBrowserClient stores the session in document.cookie as chunked cookies.
+      const hasCookie = () => document.cookie.split(";").some((c) => c.trim().startsWith("sb-"));
+      if (!hasCookie()) {
+        // Fallback: wait briefly for async cookie write to complete
+        await new Promise((r) => setTimeout(r, 200));
+      }
+
       window.location.replace(route);
     } catch (err: any) {
       setError(err?.message || "Login failed. Check your credentials.");

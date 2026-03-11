@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 // Define protected routes by role
 const roleBasedRoutes: Record<string, string[]> = {
@@ -27,44 +26,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/auth/login", request.url));
   }
 
-  // Guard: skip Supabase calls if env vars are missing (build time)
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.next();
-  }
+  // ──────────────────────────────────────────────────────────────────
+  // LIGHTWEIGHT AUTH GATE — cookie-existence check only.
+  // No Supabase API calls. No network requests.
+  // Token refresh is handled by the browser client (autoRefreshToken).
+  // Server-side validation happens in API routes / server components.
+  // ──────────────────────────────────────────────────────────────────
+  const allCookies = request.cookies.getAll();
 
-  // Create a Supabase server client that can refresh the session
-  // Using getAll/setAll (recommended by @supabase/ssr@0.5+)
-  let supabaseResponse = NextResponse.next({ request });
+  const hasAuthCookie = allCookies.some(
+    (c) => c.name.startsWith("sb-") && c.name.includes("auth-token")
+  );
 
-  const supabase = createServerClient(supabaseUrl, supabaseKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-        // First update request cookies so downstream code sees them
-        cookiesToSet.forEach(({ name, value }) =>
-          request.cookies.set(name, value)
-        );
-        // Recreate response with updated request
-        supabaseResponse = NextResponse.next({ request });
-        // Set cookies on the response so the browser stores them
-        cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, options)
-        );
-      },
-    },
-  });
-
-  // IMPORTANT: getUser() validates the token server-side and refreshes
-  // it if needed. The refreshed token is written via setAll above.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  if (!hasAuthCookie) {
     const redirectUrl = new URL("/auth/login", request.url);
     redirectUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(redirectUrl);
@@ -91,7 +65,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  return supabaseResponse;
+  return NextResponse.next();
 }
 
 export const config = {
