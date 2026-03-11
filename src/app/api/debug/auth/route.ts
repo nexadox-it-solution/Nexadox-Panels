@@ -5,7 +5,6 @@ import { createServerClient } from "@supabase/ssr";
 /**
  * GET /api/debug/auth
  * Shows cookie state and auth status for debugging.
- * Call this after login to verify cookies are being sent.
  */
 export async function GET(req: NextRequest) {
   const allCookies = req.cookies.getAll();
@@ -16,14 +15,22 @@ export async function GET(req: NextRequest) {
 
   const roleCookie = req.cookies.get("nexadox-role")?.value ?? null;
 
+  // Show all cookie names with value lengths (never expose values)
+  const cookieDetails = allCookies.map((c) => ({
+    name: c.name,
+    valueLength: c.value?.length ?? 0,
+    preview: c.value ? c.value.substring(0, 20) + "..." : "(empty)",
+  }));
+
   // Try to get the user via Supabase SSR
   let userResult: any = null;
   let userError: any = null;
+  let sessionResult: any = null;
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (url && key) {
+  if (url && key && authCookies.length > 0) {
     try {
       const supabase = createServerClient(url, key, {
         cookies: {
@@ -35,9 +42,21 @@ export async function GET(req: NextRequest) {
           },
         },
       });
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session) {
+        const s = sessionData.session;
+        sessionResult = {
+          expiresAt: s.expires_at ? new Date(s.expires_at * 1000).toISOString() : null,
+          expiresIn: s.expires_at ? Math.round(s.expires_at - Date.now() / 1000) + "s" : null,
+          tokenType: s.token_type,
+          hasRefreshToken: !!s.refresh_token,
+        };
+      }
+
       const { data, error } = await supabase.auth.getUser();
       userResult = data?.user
-        ? { id: data.user.id, email: data.user.email, role: data.user.role }
+        ? { id: data.user.id, email: data.user.email }
         : null;
       userError = error ? { message: error.message, status: error.status } : null;
     } catch (e: any) {
@@ -46,12 +65,14 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
+    timestamp: new Date().toISOString(),
     totalCookies: allCookies.length,
-    cookieNames: allCookies.map((c) => c.name),
+    cookieDetails,
     authCookieCount: authCookies.length,
     authCookieNames: authCookies.map((c) => c.name),
     roleCookie,
     envVarsPresent: { url: !!url, key: !!key },
+    session: sessionResult,
     user: userResult,
     error: userError,
   });

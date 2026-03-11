@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import SessionGuard from "@/components/SessionGuard";
 import {
   LayoutDashboard,
   UserCheck,
@@ -94,6 +95,7 @@ export default function AttendantLayout({
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <SessionGuard />
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"

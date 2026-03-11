@@ -3,6 +3,7 @@
 import { ReactNode, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import SessionGuard from "@/components/SessionGuard";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -158,6 +159,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <SessionGuard />
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div
