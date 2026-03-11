@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 // Define protected routes by role
-const roleBasedRoutes = {
+const roleBasedRoutes: Record<string, string[]> = {
   admin: ["/admin"],
   doctor: ["/doctor"],
   attendant: ["/attendant"],
@@ -27,13 +26,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/auth/login", request.url));
   }
 
-  // Skip auth checking if Supabase is not configured
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    return NextResponse.next();
-  }
-
-  // ── Step 1: Quick cookie-existence check (no API call) ──
-  // If no Supabase auth cookie exists at all, the user is definitely not logged in
+  // Check for Supabase auth cookies (no API calls — just cookie existence)
   const hasAuthCookie = request.cookies.getAll().some(
     (c) => c.name.startsWith("sb-") && c.name.includes("auth-token")
   );
@@ -44,12 +37,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  // ── Step 2: Role-based routing via lightweight role cookie ──
+  // Role-based routing via lightweight cookie (set during login)
   const userRole = request.cookies.get("nexadox-role")?.value;
 
   if (userRole) {
-    const allowedRoutes =
-      roleBasedRoutes[userRole as keyof typeof roleBasedRoutes] || [];
+    const allowedRoutes = roleBasedRoutes[userRole] || [];
 
     const isAccessingProtectedRoute = Object.values(roleBasedRoutes)
       .flat()
@@ -66,40 +58,8 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // ── Step 3: Refresh tokens in background (best-effort, never blocks) ──
-  // This keeps the auth cookies fresh without affecting navigation
-  const response = NextResponse.next({ request });
-
-  try {
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value;
-          },
-          set(name: string, value: string, options: CookieOptions) {
-            request.cookies.set({ name, value, ...options });
-            response.cookies.set({ name, value, ...options });
-          },
-          remove(name: string, options: CookieOptions) {
-            request.cookies.set({ name, value: "", ...options });
-            response.cookies.set({ name, value: "", ...options });
-          },
-        },
-      }
-    );
-
-    // This refreshes expired access tokens and updates cookies via the handlers above.
-    // We intentionally ignore the result — auth decisions are based on cookie existence,
-    // not on this API call, so transient failures don't redirect users to login.
-    await supabase.auth.getUser();
-  } catch {
-    // Token refresh failed — not critical. The browser client will retry.
-  }
-
-  return response;
+  // Allow through — browser client handles token refresh on its own
+  return NextResponse.next();
 }
 
 export const config = {
