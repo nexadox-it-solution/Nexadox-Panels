@@ -259,10 +259,8 @@ export default function DoctorLayout({
               variant="outline"
               className={`w-full gap-3 ${sidebarCollapsed ? "justify-center px-2" : "justify-start"}`}
               title={sidebarCollapsed ? "Logout" : ""}
-              onClick={async () => {
-                await supabase.auth.signOut();
-                document.cookie = "nexadox-role=; path=/; max-age=0";
-                window.location.href = "/auth/login";
+              onClick={() => {
+                window.location.href = "/api/auth/logout";
               }}
             >
               <LogOut className="h-5 w-5" />

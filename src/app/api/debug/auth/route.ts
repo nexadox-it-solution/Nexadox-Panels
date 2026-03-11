@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
   );
 
   const roleCookie = req.cookies.get("nexadox-role")?.value ?? null;
+  const sessionCookie = req.cookies.get("nexadox-session")?.value ?? null;
 
   // Show all cookie names with value lengths (never expose values)
   const cookieDetails = allCookies.map((c) => ({
@@ -71,6 +72,7 @@ export async function GET(req: NextRequest) {
     authCookieCount: authCookies.length,
     authCookieNames: authCookies.map((c) => c.name),
     roleCookie,
+    sessionCookie: sessionCookie ? `${sessionCookie.substring(0, 8)}...` : null,
     envVarsPresent: { url: !!url, key: !!key },
     session: sessionResult,
     user: userResult,

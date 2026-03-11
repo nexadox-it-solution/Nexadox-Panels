@@ -60,15 +60,17 @@ export default function LoginPage() {
 
       const route = ROLE_ROUTES[profile.role] ?? "/admin";
 
-      // Set role cookie for middleware routing (7-day expiry, refreshed on each login)
-      document.cookie = `nexadox-role=${profile.role}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-
-      // Verify auth cookies were set by the Supabase browser client before navigating.
-      // createBrowserClient stores the session in document.cookie as chunked cookies.
-      const hasCookie = () => document.cookie.split(";").some((c) => c.trim().startsWith("sb-"));
-      if (!hasCookie()) {
-        // Fallback: wait briefly for async cookie write to complete
-        await new Promise((r) => setTimeout(r, 200));
+      // Set our OWN session cookie via server-side API.
+      // This cookie is HttpOnly, Secure, 7-day expiry, and is
+      // NEVER touched by Supabase's auth-js (immune to _removeSession).
+      const sessionRes = await fetch("/api/auth/set-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: authId, role: profile.role }),
+      });
+      if (!sessionRes.ok) {
+        const errData = await sessionRes.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to set session cookie");
       }
 
       window.location.replace(route);

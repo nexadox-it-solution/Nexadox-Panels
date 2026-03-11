@@ -27,25 +27,24 @@ export async function middleware(request: NextRequest) {
   }
 
   // ──────────────────────────────────────────────────────────────────
-  // LIGHTWEIGHT AUTH GATE — cookie-existence check only.
+  // AUTH GATE — checks our OWN `nexadox-session` cookie.
+  // This cookie is:
+  //   - Set by /api/auth/set-session during login (HttpOnly, Secure)
+  //   - NOT managed by @supabase/auth-js
+  //   - Immune to Supabase's _removeSession() which wipes sb-* cookies
+  //   - 7-day expiry
   // No Supabase API calls. No network requests.
-  // Token refresh is handled by the browser client (autoRefreshToken).
-  // Server-side validation happens in API routes / server components.
   // ──────────────────────────────────────────────────────────────────
-  const allCookies = request.cookies.getAll();
+  const sessionCookie = request.cookies.get("nexadox-session")?.value;
 
-  const hasAuthCookie = allCookies.some(
-    (c) => c.name.startsWith("sb-") && c.name.includes("auth-token")
-  );
-
-  if (!hasAuthCookie) {
+  if (!sessionCookie) {
     const redirectUrl = new URL("/auth/login", request.url);
     redirectUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(redirectUrl);
   }
 
-  // Role-based routing via lightweight cookie (set during login)
-  const userRole = request.cookies.get("nexadox-role")?.value;
+  // Extract role from session cookie (format: "userId:role")
+  const userRole = sessionCookie.split(":")[1] || request.cookies.get("nexadox-role")?.value;
 
   if (userRole) {
     const allowedRoutes = roleBasedRoutes[userRole] || [];
