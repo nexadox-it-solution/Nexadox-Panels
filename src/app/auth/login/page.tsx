@@ -58,22 +58,22 @@ export default function LoginPage() {
         throw new Error("Your account has been deactivated. Please contact admin.");
       }
 
-      const route = ROLE_ROUTES[profile.role] ?? "/admin";
+      const defaultRoute = ROLE_ROUTES[profile.role] ?? "/admin";
 
-      // Set our OWN session cookie via server-side API.
-      // This cookie is HttpOnly, Secure, 7-day expiry, and is
-      // NEVER touched by Supabase's auth-js (immune to _removeSession).
-      const sessionRes = await fetch("/api/auth/set-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: authId, role: profile.role }),
-      });
-      if (!sessionRes.ok) {
-        const errData = await sessionRes.json().catch(() => ({}));
-        throw new Error(errData.error || "Failed to set session cookie");
-      }
+      // Read ?redirect= param so user returns to where they were
+      const params = new URLSearchParams(window.location.search);
+      const redirectTo = params.get("redirect") || defaultRoute;
 
-      window.location.replace(route);
+      // Set our OWN session cookie via document.cookie directly.
+      // This is the ONLY auth gate the middleware checks.
+      // - NOT managed by Supabase (immune to _removeSession)
+      // - Set synchronously (no fetch, no network, no server dependency)
+      // - 7-day expiry
+      const maxAge = 60 * 60 * 24 * 7;
+      document.cookie = `nexadox-session=${authId}:${profile.role}; path=/; max-age=${maxAge}; SameSite=Lax; Secure`;
+      document.cookie = `nexadox-role=${profile.role}; path=/; max-age=${maxAge}; SameSite=Lax; Secure`;
+
+      window.location.replace(redirectTo);
     } catch (err: any) {
       setError(err?.message || "Login failed. Check your credentials.");
     } finally {
