@@ -1,58 +1,24 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
-
 /**
- * SessionGuard monitors the Supabase auth state.
+ * SessionGuard — intentionally a no-op.
  *
- * When the Supabase client detects a token refresh failure it calls
- * `_removeSession()` internally, which deletes all `sb-*-auth-token`
- * cookies and fires the SIGNED_OUT event.
+ * Previously this component listened for Supabase's SIGNED_OUT event
+ * and cleared our nexadox-session cookie.  That behaviour was
+ * COUNTER-PRODUCTIVE: Supabase fires SIGNED_OUT whenever its own
+ * token refresh fails (6 different code-paths in _removeSession()),
+ * and our SessionGuard then deleted the independent nexadox-session
+ * cookie — the very cookie designed to survive that failure.
  *
- * This component catches that event and:
- *   1. Calls /api/auth/logout to clear our nexadox-session cookie (HttpOnly)
- *   2. Redirects to /auth/login
+ * With the current architecture:
+ *   - Middleware relies ONLY on the nexadox-session cookie.
+ *   - That cookie is set via /api/auth/set-session at login.
+ *   - It is deleted ONLY by /api/auth/logout (explicit user action).
+ *   - Supabase's internal session state is irrelevant to navigation.
  *
- * It does NOT interfere with explicit logouts (which go through
- * /api/auth/logout directly).
+ * Keeping this component as a no-op (instead of removing it) avoids
+ * having to touch the four layout files that import it.
  */
 export default function SessionGuard() {
-  const isExplicitLogout = useRef(false);
-
-  useEffect(() => {
-    // Detect clicks on the logout link
-    const handleClick = (e: MouseEvent) => {
-      const target = (e.target as HTMLElement)?.closest?.("a, button");
-      const href = target?.getAttribute("href") || "";
-      if (href.includes("/auth/logout") || href.includes("/api/auth/logout")) {
-        isExplicitLogout.current = true;
-      }
-    };
-    document.addEventListener("click", handleClick, true);
-
-    const supabase = createClient();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event) => {
-        if (event === "SIGNED_OUT" && !isExplicitLogout.current) {
-          // Session was silently removed (token refresh failure).
-          // Clear our HttpOnly session cookie via server and redirect.
-          try {
-            await fetch("/api/auth/logout", { method: "POST" });
-          } catch {
-            // Best effort
-          }
-          window.location.replace("/auth/login");
-        }
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-      document.removeEventListener("click", handleClick, true);
-    };
-  }, []);
-
   return null;
 }
