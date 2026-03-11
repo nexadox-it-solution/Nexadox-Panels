@@ -3,6 +3,7 @@
 import { ReactNode, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 import SessionGuard from "@/components/SessionGuard";
 import { cn } from "@/lib/utils";
 import {
@@ -134,6 +135,7 @@ const sidebarLinks = [
 ];
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
+  const authenticated = useAuthGuard("admin");
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -156,6 +158,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   if (isOnUsersPage) initialExpandedMenus.push("All Users");
   
   const [expandedMenus, setExpandedMenus] = useState<string[]>(initialExpandedMenus);
+
+  if (!authenticated) {
+    return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-brand-500 border-t-transparent rounded-full" /></div>;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

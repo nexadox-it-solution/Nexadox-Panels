@@ -3,6 +3,7 @@
 import { ReactNode, useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 import SessionGuard from "@/components/SessionGuard";
 import { cn } from "@/lib/utils";
 import {
@@ -39,6 +40,7 @@ const sidebarLinks = [
 const inr = (v: number) => `₹${v.toLocaleString("en-IN")}`;
 
 export default function AgentLayout({ children }: AgentLayoutProps) {
+  const authenticated = useAuthGuard("agent");
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -67,6 +69,10 @@ export default function AgentLayout({ children }: AgentLayoutProps) {
       } catch (e) { /* use defaults */ }
     })();
   }, []);
+
+  if (!authenticated) {
+    return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-brand-500 border-t-transparent rounded-full" /></div>;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

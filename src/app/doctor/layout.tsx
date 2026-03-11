@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuthGuard } from "@/hooks/useAuthGuard";
 import SessionGuard from "@/components/SessionGuard";
 import {
   LayoutDashboard,
@@ -25,6 +26,7 @@ export default function DoctorLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const authenticated = useAuthGuard("doctor");
   const supabase = createClient();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -144,6 +146,10 @@ export default function DoctorLayout({
       current: pathname === "/doctor/settings" || pathname === "/doctor/profile",
     },
   ];
+
+  if (!authenticated) {
+    return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-brand-500 border-t-transparent rounded-full" /></div>;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
