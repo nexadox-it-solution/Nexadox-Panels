@@ -9,21 +9,17 @@ export function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
+        getAll() {
+          return cookieStore.getAll();
         },
-        set(name: string, value: string, options: CookieOptions) {
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           try {
-            cookieStore.set({ name, value, ...options });
-          } catch (error) {
-            // Handle error in Server Components
-          }
-        },
-        remove(name: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value: "", ...options });
-          } catch (error) {
-            // Handle error in Server Components
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {
+            // setAll can fail in Server Components — that's expected.
+            // The middleware handles cookie refresh instead.
           }
         },
       },

@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 
 function getSupabaseAdmin() {
   return createClient(
@@ -16,16 +16,14 @@ export async function GET(req: NextRequest) {
     let authUserId = req.nextUrl.searchParams.get("userId");
 
     if (!authUserId) {
-      // Try to get user from auth cookies (SSR)
-      const response = NextResponse.next();
+      // Try to get user from auth cookies (SSR) using getAll/setAll
       const supabaseSSR = createServerClient(
         (process.env.NEXT_PUBLIC_SUPABASE_URL || ""),
         (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""),
         {
           cookies: {
-            get(name: string) { return req.cookies.get(name)?.value; },
-            set(name: string, value: string, options: CookieOptions) { response.cookies.set({ name, value, ...options }); },
-            remove(name: string, options: CookieOptions) { response.cookies.set({ name, value: "", ...options }); },
+            getAll() { return req.cookies.getAll(); },
+            setAll() { /* API route — cookie writing handled by middleware */ },
           },
         }
       );
