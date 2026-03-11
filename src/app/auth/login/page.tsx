@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +28,15 @@ export default function LoginPage() {
   const [showPass,    setShowPass]    = useState(false);
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState("");
+
+  // Clear localStorage on explicit logout
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("logout") === "1") {
+      localStorage.removeItem("nexadox-session");
+      localStorage.removeItem("nexadox-role");
+    }
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,14 +73,13 @@ export default function LoginPage() {
       const params = new URLSearchParams(window.location.search);
       const redirectTo = params.get("redirect") || defaultRoute;
 
-      // Set our OWN session cookie via document.cookie directly.
-      // This is the ONLY auth gate the middleware checks.
-      // - NOT managed by Supabase (immune to _removeSession)
-      // - Set synchronously (no fetch, no network, no server dependency)
-      // - 7-day expiry
-      const maxAge = 60 * 60 * 24 * 7;
-      document.cookie = `nexadox-session=${authId}:${profile.role}; path=/; max-age=${maxAge}; SameSite=Lax; Secure`;
-      document.cookie = `nexadox-role=${profile.role}; path=/; max-age=${maxAge}; SameSite=Lax; Secure`;
+      // Set our OWN session in localStorage.
+      // localStorage is 100% browser-side — survives refresh, immune to:
+      //   - Supabase _removeSession() (only touches its own cookies)
+      //   - Vercel Edge/CDN (cannot read or modify localStorage)
+      //   - Server-side cookie manipulation
+      localStorage.setItem("nexadox-session", `${authId}:${profile.role}`);
+      localStorage.setItem("nexadox-role", profile.role);
 
       window.location.replace(redirectTo);
     } catch (err: any) {

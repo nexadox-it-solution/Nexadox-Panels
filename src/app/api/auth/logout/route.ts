@@ -5,18 +5,15 @@ import { createClient } from "@/lib/supabase/server";
 /**
  * GET /api/auth/logout
  * Signs out the current user and redirects to login page.
+ * Passes ?logout=1 so the login page can clear localStorage.
  */
 export async function GET() {
   const supabase = createClient();
   await supabase.auth.signOut();
 
-  const response = NextResponse.redirect(
-    new URL("/auth/login", process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000")
-  );
-  // Clear ALL session cookies
-  response.cookies.set("nexadox-session", "", { path: "/", maxAge: 0 });
-  response.cookies.set("nexadox-role", "", { path: "/", maxAge: 0 });
-  return response;
+  const loginUrl = new URL("/auth/login", process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000");
+  loginUrl.searchParams.set("logout", "1");
+  return NextResponse.redirect(loginUrl);
 }
 
 /**
@@ -25,14 +22,6 @@ export async function GET() {
  */
 export async function POST() {
   const supabase = createClient();
-  const { error } = await supabase.auth.signOut();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  const response = NextResponse.json({ success: true });
-  response.cookies.set("nexadox-session", "", { path: "/", maxAge: 0 });
-  response.cookies.set("nexadox-role", "", { path: "/", maxAge: 0 });
-  return response;
+  await supabase.auth.signOut();
+  return NextResponse.json({ success: true });
 }
