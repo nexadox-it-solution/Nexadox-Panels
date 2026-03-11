@@ -1,18 +1,18 @@
 export const dynamic = 'force-dynamic';
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
 /**
  * GET /api/auth/logout
  * Signs out the current user and redirects to login page.
  * Passes ?logout=1 so the login page can clear localStorage.
+ * Uses the request's own origin so the custom domain is preserved.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const supabase = createClient();
   await supabase.auth.signOut();
 
-  const loginUrl = new URL("/auth/login", process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000");
-  loginUrl.searchParams.set("logout", "1");
+  const loginUrl = new URL("/auth/login?logout=1", req.url);
   return NextResponse.redirect(loginUrl);
 }
 
