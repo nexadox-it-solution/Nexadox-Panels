@@ -31,6 +31,8 @@ interface Doctor {
   appointment_fee: number | null; booking_fee: number | null;
   about: string | null; achievements: string[];
   is_accepting_patients: boolean;
+  is_top_doctor: boolean;
+  is_featured_doctor: boolean;
 }
 
 type DrawerTab = "profile" | "practice" | "about" | "settings";
@@ -52,6 +54,8 @@ const EMPTY_FORM = {
   about: "",
   achievements: [] as string[],
   is_accepting_patients: true,
+  is_top_doctor: false,
+  is_featured_doctor: false,
   status: "active" as "active" | "inactive",
 };
 
@@ -119,7 +123,8 @@ export default function DoctorsPage() {
           .select(`
             id, auth_user_id, name, email, mobile, avatar_url, status,
             specialty_ids, clinic_ids, degree_ids, experience,
-            appointment_fee, booking_fee, about, achievements, is_accepting_patients, created_at
+            appointment_fee, booking_fee, about, achievements, is_accepting_patients,
+            is_top_doctor, is_featured_doctor, created_at
           `)
           .order("created_at", { ascending: false }),
         supabase.from("specialties").select("id, name").order("name"),
@@ -399,6 +404,8 @@ export default function DoctorsPage() {
       about:           doc.about || "",
       achievements:    doc.achievements || [],
       is_accepting_patients: doc.is_accepting_patients,
+      is_top_doctor: doc.is_top_doctor ?? false,
+      is_featured_doctor: doc.is_featured_doctor ?? false,
       status: doc.status === "active" ? "active" : "inactive",
     });
     setFormError(""); setShowPassword(false);
@@ -426,6 +433,8 @@ export default function DoctorsPage() {
         about:           formData.about || null,
         achievements:    formData.achievements,
         is_accepting_patients: formData.is_accepting_patients,
+        is_top_doctor: formData.is_top_doctor,
+        is_featured_doctor: formData.is_featured_doctor,
       };
 
       if (drawerMode === "add") {
@@ -681,6 +690,12 @@ export default function DoctorsPage() {
                             ))}
                             {specNames.length > 2 && (
                               <span className="inline-block text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">+{specNames.length - 2}</span>
+                            )}
+                            {doc.is_top_doctor && (
+                              <span className="inline-block text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">⭐ Top</span>
+                            )}
+                            {doc.is_featured_doctor && (
+                              <span className="inline-block text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">🌟 Featured</span>
                             )}
                           </div>
                         ) : (
@@ -1741,6 +1756,38 @@ NOTIFY pgrst, 'reload schema';`}</pre>
                 </button>
               </div>
 
+              <div className="flex items-center justify-between p-4 border rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
+                <div>
+                  <p className="text-sm font-semibold">⭐ Top Doctor</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Show in "Top Doctors" section on the mobile app</p>
+                </div>
+                <button type="button"
+                  onClick={() => setFormData((p) => ({ ...p, is_top_doctor: !p.is_top_doctor }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    formData.is_top_doctor ? "bg-amber-500" : "bg-gray-300 dark:bg-gray-600"
+                  }`}>
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    formData.is_top_doctor ? "translate-x-6" : "translate-x-1"
+                  }`} />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between p-4 border rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/40 transition">
+                <div>
+                  <p className="text-sm font-semibold">🌟 Featured Doctor</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Show in "Featured Doctors" section on the mobile app</p>
+                </div>
+                <button type="button"
+                  onClick={() => setFormData((p) => ({ ...p, is_featured_doctor: !p.is_featured_doctor }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    formData.is_featured_doctor ? "bg-purple-500" : "bg-gray-300 dark:bg-gray-600"
+                  }`}>
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    formData.is_featured_doctor ? "translate-x-6" : "translate-x-1"
+                  }`} />
+                </button>
+              </div>
+
               <div className="space-y-1.5">
                 <Label>Account Status</Label>
                 <div className="grid grid-cols-2 gap-3">
@@ -1771,6 +1818,8 @@ NOTIFY pgrst, 'reload schema';`}</pre>
                 <SummaryRow label="Appt. Fee"   value={formData.appointment_fee ? `₹${formData.appointment_fee}` : "—"} />
                 <SummaryRow label="Book. Fee"   value={formData.booking_fee ? `₹${formData.booking_fee}` : "—"} />
                 <SummaryRow label="Achievements" value={formData.achievements.length ? `${formData.achievements.length} listed` : "—"} />
+                <SummaryRow label="Top Doctor" value={formData.is_top_doctor ? "⭐ Yes" : "No"} />
+                <SummaryRow label="Featured" value={formData.is_featured_doctor ? "🌟 Yes" : "No"} />
               </div>
             </div>
           )}

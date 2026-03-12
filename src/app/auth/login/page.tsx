@@ -35,6 +35,13 @@ export default function LoginPage() {
     if (params.get("logout") === "1") {
       localStorage.removeItem("nexadox-session");
       localStorage.removeItem("nexadox-role");
+      // Also clear Supabase session backups from localStorage
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith("nexadox-sb-")) keysToRemove.push(key);
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
     }
   }, []);
 

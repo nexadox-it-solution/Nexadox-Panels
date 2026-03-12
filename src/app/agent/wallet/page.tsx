@@ -58,8 +58,11 @@ export default function WalletPage() {
   const fetchWallet = useCallback(async () => {
     setLoading(true);
     try {
-      /* Fetch wallet data via server API (uses cookies for auth, bypasses RLS) */
-      const res = await fetch(`/api/agent/wallet`);
+      /* Get userId from localStorage (set at login, immune to cookie loss) */
+      const session = localStorage.getItem("nexadox-session") || "";
+      const userId = session.split(":")[0];
+      const url = userId ? `/api/agent/wallet?userId=${userId}` : `/api/agent/wallet`;
+      const res = await fetch(url);
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         console.error("[Wallet] API error:", res.status, errData);

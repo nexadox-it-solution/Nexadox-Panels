@@ -56,7 +56,10 @@ export default function AgentLayout({ children }: AgentLayoutProps) {
     (async () => {
       try {
         /* Use the server API to get wallet data (bypasses RLS) */
-        const res = await fetch("/api/agent/wallet");
+        const session = localStorage.getItem("nexadox-session") || "";
+        const userId = session.split(":")[0];
+        const url = userId ? `/api/agent/wallet?userId=${userId}` : `/api/agent/wallet`;
+        const res = await fetch(url);
         if (!res.ok) return;
         const data = await res.json();
         setAgentData({
