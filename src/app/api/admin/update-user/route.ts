@@ -18,7 +18,7 @@ function getSupabaseAdmin() {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { user_id, name, phone, status, assigned_doctors, assigned_clinic_ids, attendant_id } = body;
+    const { user_id, name, phone, status, password, assigned_doctors, assigned_clinic_ids, attendant_id } = body;
 
     if (!user_id) {
       return NextResponse.json({ error: "user_id is required." }, { status: 400 });
@@ -81,6 +81,14 @@ export async function PATCH(req: NextRequest) {
         if (attErr && !attErr.message?.toLowerCase().includes("column")) {
           return NextResponse.json({ error: attErr.message }, { status: 500 });
         }
+      }
+    }
+
+    // Update auth user password if provided
+    if (password && isUuid) {
+      const { error: pwErr } = await getSupabaseAdmin().auth.admin.updateUserById(user_id, { password });
+      if (pwErr) {
+        return NextResponse.json({ error: `Password update failed: ${pwErr.message}` }, { status: 500 });
       }
     }
 

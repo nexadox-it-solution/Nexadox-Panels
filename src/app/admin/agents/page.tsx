@@ -143,7 +143,7 @@ export default function AgentsPage() {
     if (!formData.name.trim()) { setFormError("Name is required."); return; }
     if (!formData.email.trim()) { setFormError("Email is required."); return; }
     if (drawerMode === "add" && !formData.password) { setFormError("Password is required."); return; }
-    if (drawerMode === "add" && formData.password.length < 6) { setFormError("Password min 6 chars."); return; }
+    if (formData.password && formData.password.length < 6) { setFormError("Password min 6 chars."); return; }
     const commVal = parseFloat(formData.commission_value);
     if (isNaN(commVal) || commVal < 0) { setFormError("Enter a valid commission value."); return; }
 
@@ -188,15 +188,20 @@ export default function AgentsPage() {
 
       } else if (editingAgent) {
         // Use API route for clean profile update
+        const updateBody: Record<string, any> = {
+            user_id: editingAgent.user_id,
+            name: formData.name.trim(),
+            phone: formData.mobile || null,
+            status: formData.status,
+        };
+        // Optionally update password
+        if (formData.password && formData.password.length >= 6) {
+          updateBody.password = formData.password;
+        }
         const res = await fetch("/api/admin/update-user", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: editingAgent.user_id,        // profile UUID
-            name: formData.name.trim(),
-            mobile: formData.mobile || null,
-            status: formData.status,
-          }),
+          body: JSON.stringify(updateBody),
         });
         if (!res.ok) {
           const result = await res.json();
@@ -207,7 +212,7 @@ export default function AgentsPage() {
         const { error: agentErr } = await supabase.from("agents").update({
           business_name: formData.business_name || null,
           commission_type: formData.commission_type, commission_value: commVal,
-        }).eq("id", editingAgent.id);
+        }).eq("profile_id", editingAgent.user_id);
         if (agentErr) throw agentErr;
 
         setAgents((prev) => prev.map((a) => a.id === editingAgent.id ? {
@@ -224,7 +229,8 @@ export default function AgentsPage() {
 
   const handleApproval = async (agent: Agent, status: "approved" | "rejected") => {
     try {
-      const { error } = await supabase.from("agents").update({ approval_status: status }).eq("id", agent.id);
+      // Use profile_id to match (agent.user_id is always the profile UUID)
+      const { error } = await supabase.from("agents").update({ approval_status: status }).eq("profile_id", agent.user_id);
       if (error) throw error;
       setAgents((prev) => prev.map((a) => a.id === agent.id ? { ...a, approval_status: status } : a));
       showSuccess(`"${agent.name}" ${status}.`);
@@ -239,14 +245,14 @@ export default function AgentsPage() {
       const res = await fetch("/api/admin/update-user", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: deleteConfirm.user_id }),
+        body: JSON.stringify({ user_id: deleteConfirm.user_id }),
       });
       if (!res.ok) {
         const result = await res.json();
         throw new Error(result.error || "Failed to delete agent.");
       }
       // Also clean up agent detail row
-      await supabase.from("agents").delete().eq("id", deleteConfirm.id);
+      await supabase.from("agents").delete().eq("profile_id", deleteConfirm.user_id);
       setAgents((prev) => prev.filter((a) => a.id !== deleteConfirm.id));
       setDeleteConfirm(null);
       showSuccess("Agent deleted.");
@@ -280,7 +286,7 @@ export default function AgentsPage() {
       </div>
 
       {successMsg && (
-        <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 rounded-lg px-4 py-3 text-sm">? {successMsg}</div>
+        <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 rounded-lg px-4 py-3 text-sm">✓ {successMsg}</div>
       )}
 
       {/* Stats */}
@@ -289,7 +295,7 @@ export default function AgentsPage() {
           { label: "Total Agents", val: agents.length, icon: <Users className="h-8 w-8 text-orange-400" />, color: "" },
           { label: "Pending", val: pendingCount, icon: <Clock className="h-8 w-8 text-yellow-500" />, color: "text-yellow-600" },
           { label: "Approved", val: approvedCount, icon: <BadgeCheck className="h-8 w-8 text-green-500" />, color: "text-green-600" },
-          { label: "Total Wallet", val: `?${totalEarnings.toLocaleString()}`, icon: <TrendingUp className="h-8 w-8 text-blue-400" />, color: "text-blue-600" },
+          { label: "Total Wallet", val: `₹${totalEarnings.toLocaleString()}`, icon: <TrendingUp className="h-8 w-8 text-blue-400" />, color: "text-blue-600" },
         ].map(({ label, val, icon, color }) => (
           <Card key={label}><CardContent className="pt-5 pb-4">
             <div className="flex items-center justify-between">
@@ -323,7 +329,7 @@ export default function AgentsPage() {
       {loading ? (
         <Card><CardContent className="flex items-center justify-center py-16">
           <Loader className="h-8 w-8 animate-spin text-brand-600" />
-          <p className="ml-3 text-muted-foreground">Loading agents�</p>
+          <p className="ml-3 text-muted-foreground">Loading agents...</p>
         </CardContent></Card>
       ) : (
         <Card>
@@ -360,11 +366,11 @@ export default function AgentsPage() {
                             </div>
                           </div>
                         </td>
-                        <td className="py-3 px-4 text-sm">{a.business_name || "�"}</td>
+                        <td className="py-3 px-4 text-sm">{a.business_name || "–"}</td>
                         <td className="py-3 px-4 text-sm font-medium">
-                          {a.commission_type === "percentage" ? `${a.commission_value}%` : `?${a.commission_value}`}
+                          {a.commission_type === "percentage" ? `${a.commission_value}%` : `₹${a.commission_value}`}
                         </td>
-                        <td className="py-3 px-4 text-sm font-medium">?{a.wallet_balance.toLocaleString()}</td>
+                        <td className="py-3 px-4 text-sm font-medium">₹{a.wallet_balance.toLocaleString()}</td>
                         <td className="py-3 px-4">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${statusBadge(a.approval_status)}`}>
                             {a.approval_status.charAt(0).toUpperCase() + a.approval_status.slice(1)}
@@ -404,7 +410,7 @@ export default function AgentsPage() {
             <div className="flex gap-3 justify-end pt-2">
               <Button variant="outline" onClick={() => setDeleteConfirm(null)} disabled={isSubmitting}>Cancel</Button>
               <Button variant="destructive" onClick={handleDelete} disabled={isSubmitting}>
-                {isSubmitting ? <><Loader className="h-4 w-4 animate-spin mr-2" />Deleting�</> : "Delete"}
+                {isSubmitting ? <><Loader className="h-4 w-4 animate-spin mr-2" />Deleting...</> : "Delete"}
               </Button>
             </div>
           </div>
@@ -444,18 +450,18 @@ export default function AgentsPage() {
             <Input placeholder="+91 9876543210" value={formData.mobile}
               onChange={(e) => setFormData((p) => ({ ...p, mobile: e.target.value }))} disabled={isSubmitting} /></div>
 
-          {drawerMode === "add" && (
-            <div className="space-y-2"><Label>Password <span className="text-red-500">*</span></Label>
+          <div className="space-y-2">
+            <Label>Password {drawerMode === "add" && <span className="text-red-500">*</span>}</Label>
+            {drawerMode === "edit" && <p className="text-xs text-muted-foreground">Leave blank to keep current password.</p>}
               <div className="relative">
-                <Input type={showPassword ? "text" : "password"} placeholder="Min 6 characters" value={formData.password}
+                <Input type={showPassword ? "text" : "password"} placeholder={drawerMode === "add" ? "Min 6 characters" : "New password (optional)"} value={formData.password}
                   onChange={(e) => setFormData((p) => ({ ...p, password: e.target.value }))} disabled={isSubmitting} className="pr-10" />
                 <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                   onClick={() => setShowPassword((v) => !v)}>
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-            </div>
-          )}
+          </div>
 
           <div className="space-y-2"><Label>Business Name</Label>
             <Input placeholder="e.g. MedCare Agency" value={formData.business_name}
@@ -473,7 +479,7 @@ export default function AgentsPage() {
                       ? "bg-brand-600 text-white border-brand-600"
                       : "bg-white dark:bg-gray-800 text-muted-foreground border-gray-200 hover:border-brand-400"
                   }`}>
-                  {t === "percentage" ? "Percentage (%)" : "Fixed Amount (?)"}
+                  {t === "percentage" ? "Percentage (%)" : "Fixed Amount (₹)"}
                 </button>
               ))}
             </div>
@@ -483,7 +489,7 @@ export default function AgentsPage() {
             <Label>
               Commission Value <span className="text-red-500">*</span>
               <span className="text-muted-foreground ml-1 font-normal text-xs">
-                {formData.commission_type === "percentage" ? "(e.g. 10 = 10%)" : "(e.g. 50 = ?50 per booking)"}
+                {formData.commission_type === "percentage" ? "(e.g. 10 = 10%)" : "(e.g. 50 = ₹50 per booking)"}
               </span>
             </Label>
             <div className="relative">
@@ -493,7 +499,7 @@ export default function AgentsPage() {
                 onChange={(e) => setFormData((p) => ({ ...p, commission_value: e.target.value }))}
                 disabled={isSubmitting} className="pr-10" />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-bold">
-                {formData.commission_type === "percentage" ? "%" : "?"}
+                {formData.commission_type === "percentage" ? "%" : "₹"}
               </span>
             </div>
           </div>
@@ -518,7 +524,7 @@ export default function AgentsPage() {
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t flex-shrink-0 bg-white dark:bg-gray-900">
           <Button variant="outline" onClick={() => !isSubmitting && setIsDrawerOpen(false)} disabled={isSubmitting}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={isSubmitting} className="gap-2 bg-brand-600 hover:bg-brand-700 min-w-[150px]">
-            {isSubmitting ? <><Loader className="h-4 w-4 animate-spin" /> Saving�</> : drawerMode === "add" ? <><Plus className="h-4 w-4" /> Add Agent</> : "Save Changes"}
+            {isSubmitting ? <><Loader className="h-4 w-4 animate-spin" /> Saving...</> : drawerMode === "add" ? <><Plus className="h-4 w-4" /> Add Agent</> : "Save Changes"}
           </Button>
         </div>
       </div>

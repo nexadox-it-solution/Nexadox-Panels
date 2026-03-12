@@ -41,18 +41,21 @@ export default function ReportsPage() {
       setLoading(true);
       try {
         /* ── Identify agent ───────────────────────────── */
+        const session = localStorage.getItem("nexadox-session") || "";
+        const sessionUserId = session.split(":")[0] || null;
         const { data: { user } } = await supabase.auth.getUser();
+        const userId = sessionUserId || user?.id;
         let agentUserId: number | null = null;
         let commRate = 10;
 
-        if (user) {
+        if (userId) {
           // Look up agent by profile_id, then user_id
-          const { data: agByProfile } = await supabase.from("agents").select("id, user_id, commission_value").eq("profile_id", user.id).single();
+          const { data: agByProfile } = await supabase.from("agents").select("id, user_id, commission_value").eq("profile_id", userId).single();
           if (agByProfile) {
             agentUserId = agByProfile.user_id;
             commRate = Number(agByProfile.commission_value) || 10;
           } else {
-            const { data: agByUser } = await supabase.from("agents").select("id, user_id, commission_value").eq("user_id", user.id).single();
+            const { data: agByUser } = await supabase.from("agents").select("id, user_id, commission_value").eq("user_id", userId).single();
             if (agByUser) {
               agentUserId = agByUser.user_id;
               commRate = Number(agByUser.commission_value) || 10;
@@ -66,7 +69,7 @@ export default function ReportsPage() {
         const { data: apts } = await q;
         const appointments = apts || [];
 
-        const totalEarnings = appointments.reduce((s, a) => s + (Number(a.booking_amount) || 0), 0);
+        const totalBookingValue = appointments.reduce((s, a) => s + (Number(a.booking_amount) || 0), 0);
         const totalCommission = appointments.reduce((s, a) => s + (Number(a.commission_amount) || 0), 0);
         const completed = appointments.filter(a => a.status === "completed").length;
         const cancelled = appointments.filter(a => a.status === "cancelled").length;
@@ -74,8 +77,8 @@ export default function ReportsPage() {
 
         setStats({
           totalBookings: appointments.length,
-          totalEarnings,
-          totalCommission,
+          totalEarnings: totalCommission,
+          totalCommission: totalBookingValue,
           avgCommission: commRate,
           completedBookings: completed,
           cancelledBookings: cancelled,
@@ -186,9 +189,9 @@ export default function ReportsPage() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Commission</p>
+                <p className="text-sm text-muted-foreground">Booking Value</p>
                 <p className="text-3xl font-bold mt-2">{inr(stats.totalCommission)}</p>
-                <p className="text-xs text-muted-foreground mt-1">{stats.avgCommission}% avg rate</p>
+                <p className="text-xs text-muted-foreground mt-1">{stats.avgCommission}% commission rate</p>
               </div>
               <TrendingUp className="h-8 w-8 text-purple-600" />
             </div>

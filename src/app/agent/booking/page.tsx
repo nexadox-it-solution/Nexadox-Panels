@@ -117,9 +117,13 @@ export default function AgentBookingPage() {
     (async () => {
       setLoading(true);
       try {
+        // Use localStorage session (reliable) with supabase.auth.getUser() fallback
+        const session = localStorage.getItem("nexadox-session") || "";
+        const sessionUserId = session.split(":")[0] || null;
         const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const ag = await resolveAgent(user.id);
+        const userId = sessionUserId || user?.id;
+        if (userId) {
+          const ag = await resolveAgent(userId);
           if (ag) {
             setAgentUserId(ag.user_id || ag.id);
             setAgentId(ag.id);
