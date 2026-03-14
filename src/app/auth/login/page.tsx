@@ -1,26 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Eye, EyeOff, Loader, AlertCircle,
-  Calendar, Users, Shield, Stethoscope, Clock
+  Calendar, Users, Shield, Clock
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-
-function getSupabase() {
-  return createClient();
-}
-
-const ROLE_ROUTES: Record<string, string> = {
-  admin:     "/admin",
-  doctor:    "/doctor",
-  agent:     "/agent",
-  attendant: "/attendant",
-  patient:   "/patient",
-};
+import { supabase } from "@/lib/supabase";
+import {
+  checkLoginBlocked,
+  recordLoginAttempt,
+  clearLoginAttempts,
+  setSession,
+  clearSession,
+  ROLE_ROUTES,
+} from "@/lib/auth";
 
 export default function LoginPage() {
   const [email,       setEmail]       = useState("");
@@ -28,39 +24,80 @@ export default function LoginPage() {
   const [showPass,    setShowPass]    = useState(false);
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState("");
+  const [cooldown,    setCooldown]    = useState(0);
 
-  // Clear localStorage on explicit logout
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clear localStorage on explicit logout + check if already blocked
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("logout") === "1") {
-      localStorage.removeItem("nexadox-session");
-      localStorage.removeItem("nexadox-role");
-      // Also clear Supabase session backups from localStorage
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key?.startsWith("nexadox-sb-")) keysToRemove.push(key);
-      }
-      keysToRemove.forEach((k) => localStorage.removeItem(k));
+      clearSession();
     }
+
+    // Check existing rate limit on mount
+    const { blocked, remainingSeconds } = checkLoginBlocked();
+    if (blocked) startCooldown(remainingSeconds);
+
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
   }, []);
+
+  const startCooldown = (seconds: number) => {
+    setCooldown(seconds);
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    cooldownRef.current = setInterval(() => {
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          if (cooldownRef.current) clearInterval(cooldownRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return; // Prevent double-submit
+
     setError("");
+
+    // Check rate limit before making request
+    const blockCheck = checkLoginBlocked();
+    if (blockCheck.blocked) {
+      startCooldown(blockCheck.remainingSeconds);
+      setError(`Too many login attempts. Please wait ${blockCheck.remainingSeconds} seconds.`);
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const { data: authData, error: authErr } = await getSupabase().auth.signInWithPassword({
+      // Direct Supabase auth — no API proxy
+      const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
-      if (authErr) throw authErr;
+
+      if (authErr) {
+        // Record failed attempt
+        const attempt = recordLoginAttempt();
+        if (attempt.blocked) {
+          startCooldown(attempt.remainingSeconds);
+          throw new Error(`Too many login attempts. Please wait ${attempt.remainingSeconds} seconds.`);
+        }
+        throw authErr;
+      }
+
+      // Login successful — clear attempt counter
+      clearLoginAttempts();
 
       const authId = authData.user.id;
 
-      // SINGLE SOURCE OF TRUTH: profiles table only
-      const { data: profile, error: profileErr } = await getSupabase()
+      // Fetch role from profiles table (single source of truth)
+      const { data: profile, error: profileErr } = await supabase
         .from("profiles")
         .select("role, status")
         .eq("id", authId)
@@ -76,17 +113,12 @@ export default function LoginPage() {
 
       const defaultRoute = ROLE_ROUTES[profile.role] ?? "/admin";
 
-      // Read ?redirect= param so user returns to where they were
+      // Read ?redirect= param
       const params = new URLSearchParams(window.location.search);
       const redirectTo = params.get("redirect") || defaultRoute;
 
-      // Set our OWN session in localStorage.
-      // localStorage is 100% browser-side — survives refresh, immune to:
-      //   - Supabase _removeSession() (only touches its own cookies)
-      //   - Vercel Edge/CDN (cannot read or modify localStorage)
-      //   - Server-side cookie manipulation
-      localStorage.setItem("nexadox-session", `${authId}:${profile.role}`);
-      localStorage.setItem("nexadox-role", profile.role);
+      // Set session in localStorage (immune to Supabase token wipes)
+      setSession(authId, profile.role);
 
       window.location.replace(redirectTo);
     } catch (err: any) {
@@ -95,6 +127,8 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  const isBlocked = cooldown > 0;
 
   const features = [
     { icon: Calendar, title: "Smart Scheduling", desc: "AI-powered appointment booking with real-time availability" },
@@ -130,7 +164,7 @@ export default function LoginPage() {
                 Management
               </h1>
               <p className="mt-4 text-lg text-brand-100/80 max-w-md">
-                A unified platform for managing appointments, patients, queues, and commissions � all in one place.
+                A unified platform for managing appointments, patients, queues, and commissions &mdash; all in one place.
               </p>
             </div>
 
@@ -195,7 +229,14 @@ export default function LoginPage() {
               {error && (
                 <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
                   <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                  {error}
+                  <span>{error}</span>
+                </div>
+              )}
+
+              {isBlocked && !error && (
+                <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                  <Clock className="h-4 w-4 flex-shrink-0" />
+                  <span>Too many attempts. Try again in <strong>{cooldown}s</strong></span>
                 </div>
               )}
 
@@ -210,7 +251,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  disabled={loading}
+                  disabled={loading || isBlocked}
                   className="h-12 rounded-xl text-sm font-medium bg-slate-50 border-slate-200 focus:bg-white focus:border-brand-400 focus:ring-brand-400 transition-colors"
                 />
               </div>
@@ -227,7 +268,7 @@ export default function LoginPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    disabled={loading}
+                    disabled={loading || isBlocked}
                     className="h-12 rounded-xl text-sm font-medium pr-12 bg-slate-50 border-slate-200 focus:bg-white focus:border-brand-400 focus:ring-brand-400 transition-colors"
                   />
                   <button
@@ -243,11 +284,13 @@ export default function LoginPage() {
 
               <Button
                 type="submit"
-                disabled={loading}
-                className="w-full h-12 bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-700 hover:to-brand-800 text-white font-semibold text-sm rounded-xl gap-2 shadow-lg shadow-brand-200/50 transition-all hover:shadow-brand-300/50"
+                disabled={loading || isBlocked}
+                className="w-full h-12 bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-700 hover:to-brand-800 text-white font-semibold text-sm rounded-xl gap-2 shadow-lg shadow-brand-200/50 transition-all hover:shadow-brand-300/50 disabled:opacity-60"
               >
                 {loading ? (
-                  <><Loader className="h-4 w-4 animate-spin" /> Signing in�</>
+                  <><Loader className="h-4 w-4 animate-spin" /> Signing in...</>
+                ) : isBlocked ? (
+                  `Try again in ${cooldown}s`
                 ) : (
                   "Sign In"
                 )}

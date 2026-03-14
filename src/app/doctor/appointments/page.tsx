@@ -8,7 +8,7 @@ import {
   Calendar, Search, Clock, CheckCircle, AlertCircle, XCircle,
   Eye, FileText, Phone, Mail, X, Loader,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { supabase } from "@/lib/supabase";
 
 interface Appointment {
   id: number;
@@ -31,7 +31,6 @@ interface Appointment {
 }
 
 export default function AppointmentsPage() {
-  const supabase = createClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedDate, setSelectedDate] = useState("");
@@ -42,17 +41,21 @@ export default function AppointmentsPage() {
   useEffect(() => {
     (async () => {
       try {
+        // Use localStorage userId (reliable) with supabase.auth fallback
+        const session = localStorage.getItem("nexadox-session") || "";
+        const sessionUserId = session.split(":")[0] || null;
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        const userId = sessionUserId || user?.id;
+        if (!userId) return;
         // Try profile_id first (new architecture), then fall back to auth_user_id
         let doc: { id: number } | null = null;
         const { data: byProfile } = await supabase
-          .from("doctors").select("id").eq("profile_id", user.id).single();
+          .from("doctors").select("id").eq("profile_id", userId).single();
         if (byProfile) {
           doc = byProfile;
         } else {
           const { data: byAuth } = await supabase
-            .from("doctors").select("id").eq("auth_user_id", user.id).single();
+            .from("doctors").select("id").eq("auth_user_id", userId).single();
           doc = byAuth;
         }
         if (!doc) return;
