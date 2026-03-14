@@ -29,8 +29,8 @@ const SESSION_TIME_MAP: Record<string, string> = {
 
 /**
  * GET /api/attendant/appointments
- * Fetches ALL appointments (no filtering by doctor_ids - shows all new and previous appointments).
- * Optional filters: date, status.
+ * Fetches appointments filtered by optional doctor_ids/clinic_ids for attendant scope.
+ * Optional filters: date, status, doctor_ids (comma-separated), clinic_ids (comma-separated).
  */
 export async function GET(req: NextRequest) {
   try {
@@ -38,6 +38,8 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(url.searchParams.get("limit") || "500");
     const date = url.searchParams.get("date");             // YYYY-MM-DD (optional)
     const status = url.searchParams.get("status");         // e.g. "scheduled" (optional)
+    const doctorIdsParam = url.searchParams.get("doctor_ids");   // comma-separated doctor IDs
+    const clinicIdsParam = url.searchParams.get("clinic_ids");   // comma-separated clinic IDs
 
     let query = getSupabaseAdmin()
       .from("appointments")
@@ -53,6 +55,22 @@ export async function GET(req: NextRequest) {
     // Optional status filter
     if (status) {
       query = query.eq("status", status);
+    }
+
+    // Filter by assigned doctor IDs
+    if (doctorIdsParam) {
+      const doctorIds = doctorIdsParam.split(",").map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
+      if (doctorIds.length > 0) {
+        query = query.in("doctor_id", doctorIds);
+      }
+    }
+
+    // Filter by assigned clinic IDs
+    if (clinicIdsParam) {
+      const clinicIds = clinicIdsParam.split(",").map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
+      if (clinicIds.length > 0) {
+        query = query.in("clinic_id", clinicIds);
+      }
     }
 
     const { data, error } = await query;

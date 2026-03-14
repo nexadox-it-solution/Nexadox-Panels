@@ -164,8 +164,9 @@ export default function AttendantsPage() {
       password: "",
       status: att.user.status === "active" ? "active" : "inactive",
     });
-    setAssignedDoctorIds(att.assigned_doctors || []);
-    setAssignedClinicIds(att.assigned_clinic_ids || []);
+    // Convert to strings — DB stores numbers but UI uses string IDs
+    setAssignedDoctorIds((att.assigned_doctors || []).map(String));
+    setAssignedClinicIds((att.assigned_clinic_ids || []).map(Number));
     setFormError("");
     setDoctorSearch("");
     setClinicSearch("");
@@ -245,7 +246,7 @@ export default function AttendantsPage() {
             name: formData.name.trim(),
             phone: formData.mobile || null,
             status: formData.status,
-            attendant_id: editingAttendant.id || undefined,
+            attendant_id: editingAttendant.id || null,
             assigned_doctors: assignedDoctorIds,
             assigned_clinic_ids: assignedClinicIds,
           }),
@@ -339,9 +340,9 @@ export default function AttendantsPage() {
     });
   };
 
-  const getDoctorName = (docId: string) => {
-    const doc = doctors.find((d) => d.id === docId);
-    return doc ? doc.name : docId;
+  const getDoctorName = (docId: string | number) => {
+    const doc = doctors.find((d) => d.id === String(docId));
+    return doc ? doc.name : String(docId);
   };
 
   const getClinicName = (clinicId: number) => {

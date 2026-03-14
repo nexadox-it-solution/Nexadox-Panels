@@ -253,9 +253,18 @@ export default function AttendantAppointmentsPage() {
       setDoctors(scopedDoctors);
       setSpecialties(allSpecs);
 
-      // Fetch ALL appointments (shows new and previous appointments)
+      // Fetch appointments scoped to this attendant's assigned doctors/clinics
       try {
-        const res = await fetch(`/api/attendant/appointments`);
+        let aptUrl = `/api/attendant/appointments`;
+        const params: string[] = [];
+        if (hasAttendantScope && myDoctorIds.length > 0) {
+          params.push(`doctor_ids=${myDoctorIds.join(",")}`);
+        }
+        if (hasAttendantScope && myClinicIds.length > 0) {
+          params.push(`clinic_ids=${myClinicIds.join(",")}`);
+        }
+        if (params.length > 0) aptUrl += `?${params.join("&")}`;
+        const res = await fetch(aptUrl);
         const json = await res.json();
         setAppointments((json.appointments || []) as Appointment[]);
       } catch {

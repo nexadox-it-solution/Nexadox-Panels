@@ -90,8 +90,31 @@ export default function CheckInPage() {
     setLoading(true);
     try {
       const today = todayStr();
-      // Fetch appointments
-      const aptRes = await fetch(`/api/attendant/appointments?date=${today}&status=scheduled`);
+
+      // 1. Get logged-in attendant's assigned doctors/clinics
+      let doctorIdsParam = "";
+      let clinicIdsParam = "";
+      try {
+        const session = localStorage.getItem("nexadox-session"); // "userId:role"
+        const userId = session?.split(":")[0];
+        if (userId) {
+          const { data: attRow } = await (await import("@/lib/supabase")).supabase
+            .from("attendants")
+            .select("assigned_doctors, assigned_clinic_ids")
+            .or(`profile_id.eq.${userId},user_id.eq.${userId}`)
+            .limit(1)
+            .single();
+          if (attRow?.assigned_doctors?.length) {
+            doctorIdsParam = `&doctor_ids=${attRow.assigned_doctors.join(",")}`;
+          }
+          if (attRow?.assigned_clinic_ids?.length) {
+            clinicIdsParam = `&clinic_ids=${attRow.assigned_clinic_ids.join(",")}`;
+          }
+        }
+      } catch (_e) { /* fallback: show all if attendant record not found */ }
+
+      // 2. Fetch appointments scoped to this attendant's assignments
+      const aptRes = await fetch(`/api/attendant/appointments?date=${today}&status=scheduled${doctorIdsParam}${clinicIdsParam}`);
       const aptJson = await aptRes.json();
       const allApts: Appointment[] = aptJson.appointments || [];
       // Filter: only today's scheduled + pending checkin

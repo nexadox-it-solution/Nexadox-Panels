@@ -18,11 +18,19 @@ function getSupabaseAdmin() {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { user_id, name, phone, status, password, assigned_doctors, assigned_clinic_ids, attendant_id } = body;
+    const {
+      user_id, name, phone, status, password,
+      // Attendant fields
+      assigned_doctors, assigned_clinic_ids, attendant_id,
+      // Agent fields
+      business_name, commission_type, commission_value, approval_status,
+    } = body;
 
     if (!user_id) {
       return NextResponse.json({ error: "user_id is required." }, { status: 400 });
     }
+
+    const admin = getSupabaseAdmin();
 
     // Determine if user_id is UUID (profile id) or integer (old users table id)
     const isUuid = typeof user_id === "string" && user_id.includes("-");
@@ -36,7 +44,7 @@ export async function PATCH(req: NextRequest) {
     // Update profiles table (primary source of truth)
     if (Object.keys(update).length > 0) {
       if (isUuid) {
-        const { error: profileErr } = await getSupabaseAdmin()
+        const { error: profileErr } = await admin
           .from("profiles")
           .update(update)
           .eq("id", user_id);
@@ -49,16 +57,44 @@ export async function PATCH(req: NextRequest) {
       try {
         const usersUpdate = { ...update };
         const { error: userErr } = isUuid
-          ? await getSupabaseAdmin().from("users").update(usersUpdate).eq("auth_user_id", user_id)
-          : await getSupabaseAdmin().from("users").update(usersUpdate).eq("id", user_id);
+          ? await admin.from("users").update(usersUpdate).eq("auth_user_id", user_id)
+          : await admin.from("users").update(usersUpdate).eq("id", user_id);
         if (userErr) {
           console.warn("Users table update warning:", userErr.message);
         }
       } catch (_e) { /* users table may not exist */ }
     }
 
-    // Update attendants table if attendant_id provided
-    if (attendant_id !== undefined) {
+    // ── Update agents table ──────────────────────────────────
+    if (business_name !== undefined || commission_type !== undefined ||
+        commission_value !== undefined || approval_status !== undefined) {
+      const agentUpdate: Record<string, any> = {};
+      if (business_name !== undefined) agentUpdate.business_name = business_name;
+      if (commission_type !== undefined) agentUpdate.commission_type = commission_type;
+      if (commission_value !== undefined) agentUpdate.commission_value = commission_value;
+      if (approval_status !== undefined) agentUpdate.approval_status = approval_status;
+
+      if (Object.keys(agentUpdate).length > 0) {
+        // Try profile_id first, fallback to user_id
+        const { error: agErr } = await admin
+          .from("agents")
+          .update(agentUpdate)
+          .eq("profile_id", user_id);
+        if (agErr) {
+          // Fallback: try user_id column
+          const { error: agErr2 } = await admin
+            .from("agents")
+            .update(agentUpdate)
+            .eq("user_id", user_id);
+          if (agErr2) {
+            console.warn("Agent update warning:", agErr2.message);
+          }
+        }
+      }
+    }
+
+    // ── Update attendants table ──────────────────────────────
+    if (attendant_id !== undefined || assigned_doctors !== undefined || assigned_clinic_ids !== undefined) {
       const attUpdate: Record<string, any> = {};
 
       if (assigned_doctors !== undefined) {
@@ -74,19 +110,35 @@ export async function PATCH(req: NextRequest) {
       }
 
       if (Object.keys(attUpdate).length > 0) {
-        const { error: attErr } = await getSupabaseAdmin()
-          .from("attendants")
-          .update(attUpdate)
-          .eq("id", attendant_id);
-        if (attErr && !attErr.message?.toLowerCase().includes("column")) {
-          return NextResponse.json({ error: attErr.message }, { status: 500 });
+        let updated = false;
+        // Try by attendant_id first
+        if (attendant_id) {
+          const { error: attErr } = await admin
+            .from("attendants")
+            .update(attUpdate)
+            .eq("id", attendant_id);
+          if (!attErr) updated = true;
+        }
+        // Fallback: try by profile_id (handles null attendant_id)
+        if (!updated && isUuid) {
+          const { error: attErr2 } = await admin
+            .from("attendants")
+            .update(attUpdate)
+            .eq("profile_id", user_id);
+          if (attErr2) {
+            // Last resort: try user_id column
+            await admin
+              .from("attendants")
+              .update(attUpdate)
+              .eq("user_id", user_id);
+          }
         }
       }
     }
 
     // Update auth user password if provided
     if (password && isUuid) {
-      const { error: pwErr } = await getSupabaseAdmin().auth.admin.updateUserById(user_id, { password });
+      const { error: pwErr } = await admin.auth.admin.updateUserById(user_id, { password });
       if (pwErr) {
         return NextResponse.json({ error: `Password update failed: ${pwErr.message}` }, { status: 500 });
       }

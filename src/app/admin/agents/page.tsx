@@ -187,12 +187,16 @@ export default function AgentsPage() {
         showSuccess(`Agent "${formData.name}" added (pending approval).`);
 
       } else if (editingAgent) {
-        // Use API route for clean profile update
+        // Use API route for clean profile + agent detail update (service role, bypasses RLS)
         const updateBody: Record<string, any> = {
             user_id: editingAgent.user_id,
             name: formData.name.trim(),
             phone: formData.mobile || null,
             status: formData.status,
+            // Agent-specific fields (updated via service role in the API)
+            business_name: formData.business_name || null,
+            commission_type: formData.commission_type,
+            commission_value: commVal,
         };
         // Optionally update password
         if (formData.password && formData.password.length >= 6) {
@@ -208,13 +212,6 @@ export default function AgentsPage() {
           throw new Error(result.error || "Failed to update agent.");
         }
 
-        // Update agent-specific details
-        const { error: agentErr } = await supabase.from("agents").update({
-          business_name: formData.business_name || null,
-          commission_type: formData.commission_type, commission_value: commVal,
-        }).eq("profile_id", editingAgent.user_id);
-        if (agentErr) throw agentErr;
-
         setAgents((prev) => prev.map((a) => a.id === editingAgent.id ? {
           ...a, name: formData.name.trim(), mobile: formData.mobile || null, status: formData.status,
           business_name: formData.business_name || null,
@@ -227,13 +224,23 @@ export default function AgentsPage() {
     finally { setIsSubmitting(false); }
   };
 
-  const handleApproval = async (agent: Agent, status: "approved" | "rejected") => {
+  const handleApproval = async (agent: Agent, newStatus: "approved" | "rejected") => {
     try {
-      // Use profile_id to match (agent.user_id is always the profile UUID)
-      const { error } = await supabase.from("agents").update({ approval_status: status }).eq("profile_id", agent.user_id);
-      if (error) throw error;
-      setAgents((prev) => prev.map((a) => a.id === agent.id ? { ...a, approval_status: status } : a));
-      showSuccess(`"${agent.name}" ${status}.`);
+      // Use server API (service role) to bypass RLS
+      const res = await fetch("/api/admin/update-user", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: agent.user_id,
+          approval_status: newStatus,
+        }),
+      });
+      if (!res.ok) {
+        const result = await res.json();
+        throw new Error(result.error || "Failed to update approval.");
+      }
+      setAgents((prev) => prev.map((a) => a.id === agent.id ? { ...a, approval_status: newStatus } : a));
+      showSuccess(`"${agent.name}" ${newStatus}.`);
     } catch (err: any) { console.error(err); }
   };
 
