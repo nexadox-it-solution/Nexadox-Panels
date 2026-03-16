@@ -19,6 +19,12 @@ const SESSION_TIME_MAP: Record<string, string> = {
 
 const genId = () =>
   "APT" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
+const genVoucher = () =>
+  "VCH" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
+const genInvoice = () =>
+  "INV" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
+const genTxn = () =>
+  "TXN" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
 
 /**
  * POST /api/mobile/appointments
@@ -98,6 +104,8 @@ export async function POST(req: NextRequest) {
     // Strategy 1: full insert with payment_id and appointment_time
     if (payment_id) insertPayload.payment_id = payment_id;
 
+    let aptData: any = null;
+
     const { data: d1, error: e1 } = await admin
       .from("appointments")
       .insert(insertPayload)
@@ -105,36 +113,156 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (!e1 && d1) {
-      return NextResponse.json(d1, { status: 201 });
+      aptData = d1;
+    } else {
+      // Strategy 2: without payment_id (column may not exist)
+      const { payment_id: _pid, ...withoutPaymentId } = insertPayload;
+      const { data: d2, error: e2 } = await admin
+        .from("appointments")
+        .insert(withoutPaymentId)
+        .select()
+        .single();
+
+      if (!e2 && d2) {
+        aptData = d2;
+      } else {
+        // Strategy 3: without appointment_time
+        const { appointment_time: _at, ...withoutTime } = withoutPaymentId;
+        const { data: d3, error: e3 } = await admin
+          .from("appointments")
+          .insert(withoutTime)
+          .select()
+          .single();
+
+        if (!e3 && d3) {
+          aptData = d3;
+        } else {
+          return NextResponse.json(
+            { error: e3?.message || e2?.message || e1?.message || "Failed to create appointment" },
+            { status: 500 }
+          );
+        }
+      }
     }
 
-    // Strategy 2: without payment_id (column may not exist)
-    const { payment_id: _pid, ...withoutPaymentId } = insertPayload;
-    const { data: d2, error: e2 } = await admin
-      .from("appointments")
-      .insert(withoutPaymentId)
-      .select()
-      .single();
-
-    if (!e2 && d2) {
-      return NextResponse.json(d2, { status: 201 });
+    // ── Fetch doctor & clinic names for voucher/invoice ─────
+    let doctorName = "Doctor";
+    let clinicName = "Clinic";
+    try {
+      const { data: docRow } = await admin.from("doctors").select("name").eq("id", doctor_id).single();
+      if (docRow) doctorName = docRow.name;
+    } catch {}
+    if (clinic_id) {
+      try {
+        const { data: clinicRow } = await admin.from("clinics").select("name").eq("id", clinic_id).single();
+        if (clinicRow) clinicName = clinicRow.name;
+      } catch {}
     }
 
-    // Strategy 3: without appointment_time
-    const { appointment_time: _at, ...withoutTime } = withoutPaymentId;
-    const { data: d3, error: e3 } = await admin
-      .from("appointments")
-      .insert(withoutTime)
-      .select()
-      .single();
+    const bookingAmount = Number(booking_fee || consultation_fee || 0);
 
-    if (!e3 && d3) {
-      return NextResponse.json(d3, { status: 201 });
+    // ── CREATE VOUCHER ──────────────────────────────────────
+    let voucherId: number | null = null;
+    try {
+      const voucherPayload: Record<string, any> = {
+        voucher_number: genVoucher(),
+        appointment_id: aptData.id,
+        patient_name: patient_name || "Patient",
+        doctor_name: doctorName,
+        clinic_name: clinicName,
+        appointment_date,
+        appointment_slot: slot,
+        booking_amount: bookingAmount,
+        commission_amount: 0,
+        total_payable: bookingAmount,
+        status: "active",
+      };
+      // Try with token_number first
+      voucherPayload.token_number = tokenNumber;
+      const { data: vData, error: vErr } = await admin
+        .from("vouchers")
+        .insert(voucherPayload)
+        .select("id")
+        .single();
+      if (!vErr && vData) {
+        voucherId = vData.id;
+      } else {
+        // Retry without token_number if column doesn't exist
+        delete voucherPayload.token_number;
+        const { data: vData2, error: vErr2 } = await admin
+          .from("vouchers")
+          .insert(voucherPayload)
+          .select("id")
+          .single();
+        if (!vErr2 && vData2) voucherId = vData2.id;
+      }
+    } catch (e) {
+      console.error("Mobile voucher creation error:", e);
+    }
+
+    // ── CREATE INVOICE ──────────────────────────────────────
+    let invoiceId: number | null = null;
+    try {
+      const taxableAmount = Number((bookingAmount / 1.18).toFixed(2));
+      const gstAmount = Number((bookingAmount - taxableAmount).toFixed(2));
+
+      const { data: invData, error: invErr } = await admin
+        .from("invoices")
+        .insert({
+          txn_id: genTxn(),
+          booking_id: aptData.appointment_id,
+          user_name: (patient_name || "Patient").trim(),
+          user_email: "",
+          user_id: String(doctor_id),
+          invoice_number: genInvoice(),
+          invoice_date: appointment_date,
+          taxable_amount: taxableAmount,
+          gst_amount: gstAmount,
+          gst: gstAmount,
+          total_amount: bookingAmount,
+          gst_percentage: 18,
+          status: "issued",
+          appointment_id: aptData.id,
+        })
+        .select("id")
+        .single();
+      if (!invErr && invData) invoiceId = invData.id;
+      else console.error("Mobile invoice insert error:", invErr?.message);
+    } catch (e) {
+      console.error("Mobile invoice creation error:", e);
+    }
+
+    // ── CREATE PATIENT TRANSACTION ──────────────────────────
+    try {
+      const { error: txnErr } = await admin.from("patient_transactions").insert({
+        txn_id: genTxn(),
+        booking_id: aptData.appointment_id,
+        user_name: (patient_name || "Patient").trim(),
+        user_email: "",
+        reason: `Appointment booking: ${doctorName} at ${clinicName}`,
+        amount: bookingAmount,
+        balance: 0,
+        status: "completed",
+        started_on: appointment_date,
+      });
+      if (txnErr) console.error("Mobile transaction insert error:", txnErr.message);
+    } catch (e) {
+      console.error("Mobile transaction creation error:", e);
+    }
+
+    // ── UPDATE APPOINTMENT with voucher_id + invoice_id ─────
+    if (voucherId || invoiceId) {
+      try {
+        const upd: Record<string, any> = {};
+        if (voucherId) upd.voucher_id = voucherId;
+        if (invoiceId) upd.invoice_id = invoiceId;
+        await admin.from("appointments").update(upd).eq("id", aptData.id);
+      } catch {}
     }
 
     return NextResponse.json(
-      { error: e3?.message || e2?.message || e1?.message || "Failed to create appointment" },
-      { status: 500 }
+      { ...aptData, voucher_id: voucherId, invoice_id: invoiceId },
+      { status: 201 }
     );
   } catch (err: any) {
     return NextResponse.json(

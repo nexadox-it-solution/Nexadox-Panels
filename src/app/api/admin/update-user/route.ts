@@ -65,7 +65,7 @@ export async function PATCH(req: NextRequest) {
       } catch (_e) { /* users table may not exist */ }
     }
 
-    // ── Update agents table ──────────────────────────────────
+    // ── Upsert agents table (ensures row exists) ──────────────
     if (business_name !== undefined || commission_type !== undefined ||
         commission_value !== undefined || approval_status !== undefined) {
       const agentUpdate: Record<string, any> = {};
@@ -75,25 +75,47 @@ export async function PATCH(req: NextRequest) {
       if (approval_status !== undefined) agentUpdate.approval_status = approval_status;
 
       if (Object.keys(agentUpdate).length > 0) {
-        // Try profile_id first, fallback to user_id
-        const { error: agErr } = await admin
+        let saved = false;
+
+        // Try update by profile_id first
+        const { data: upd1 } = await admin
           .from("agents")
           .update(agentUpdate)
-          .eq("profile_id", user_id);
-        if (agErr) {
-          // Fallback: try user_id column
-          const { error: agErr2 } = await admin
+          .eq("profile_id", user_id)
+          .select("id");
+        if (upd1 && upd1.length > 0) saved = true;
+
+        // Fallback: try user_id column
+        if (!saved) {
+          const { data: upd2 } = await admin
             .from("agents")
             .update(agentUpdate)
-            .eq("user_id", user_id);
-          if (agErr2) {
-            console.warn("Agent update warning:", agErr2.message);
+            .eq("user_id", user_id)
+            .select("id");
+          if (upd2 && upd2.length > 0) saved = true;
+        }
+
+        // If no row was updated, INSERT a new agent row
+        if (!saved && isUuid) {
+          const { error: insErr } = await admin
+            .from("agents")
+            .insert({
+              user_id: user_id,
+              profile_id: user_id,
+              wallet_balance: 0,
+              commission_type: commission_type || "percentage",
+              commission_value: commission_value ?? 10,
+              approval_status: approval_status || "pending",
+              ...agentUpdate,
+            });
+          if (insErr) {
+            console.warn("Agent insert fallback warning:", insErr.message);
           }
         }
       }
     }
 
-    // ── Update attendants table ──────────────────────────────
+    // ── Upsert attendants table (ensures row exists) ─────────
     if (attendant_id !== undefined || assigned_doctors !== undefined || assigned_clinic_ids !== undefined) {
       const attUpdate: Record<string, any> = {};
 
@@ -110,27 +132,43 @@ export async function PATCH(req: NextRequest) {
       }
 
       if (Object.keys(attUpdate).length > 0) {
-        let updated = false;
-        // Try by attendant_id first
+        let saved = false;
+
+        // Try update by attendant_id first
         if (attendant_id) {
-          const { error: attErr } = await admin
+          const { data: upd } = await admin
             .from("attendants")
             .update(attUpdate)
-            .eq("id", attendant_id);
-          if (!attErr) updated = true;
+            .eq("id", attendant_id)
+            .select("id");
+          if (upd && upd.length > 0) saved = true;
         }
-        // Fallback: try by profile_id (handles null attendant_id)
-        if (!updated && isUuid) {
-          const { error: attErr2 } = await admin
+
+        // Try update by profile_id
+        if (!saved && isUuid) {
+          const { data: upd2 } = await admin
             .from("attendants")
             .update(attUpdate)
-            .eq("profile_id", user_id);
-          if (attErr2) {
-            // Last resort: try user_id column
-            await admin
-              .from("attendants")
-              .update(attUpdate)
-              .eq("user_id", user_id);
+            .eq("profile_id", user_id)
+            .select("id");
+          if (upd2 && upd2.length > 0) saved = true;
+        }
+
+        // If no row was updated, INSERT a new attendant row
+        if (!saved && isUuid) {
+          const { error: insErr } = await admin
+            .from("attendants")
+            .insert({
+              user_id: user_id,
+              profile_id: user_id,
+              full_name: name || "",
+              email: "",
+              phone: phone || null,
+              status: status || "active",
+              ...attUpdate,
+            });
+          if (insErr) {
+            console.warn("Attendant insert fallback warning:", insErr.message);
           }
         }
       }
