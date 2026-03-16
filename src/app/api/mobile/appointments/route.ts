@@ -94,9 +94,10 @@ export async function POST(req: NextRequest) {
     };
 
     if (clinic_id) insertPayload.clinic_id = clinic_id;
+
+    // Strategy 1: full insert with payment_id and appointment_time
     if (payment_id) insertPayload.payment_id = payment_id;
 
-    // Strategy 1: full insert (with appointment_time)
     const { data: d1, error: e1 } = await admin
       .from("appointments")
       .insert(insertPayload)
@@ -107,11 +108,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(d1, { status: 201 });
     }
 
-    // Strategy 2: without appointment_time (column may be nullable)
-    const { appointment_time, ...withoutTime } = insertPayload;
+    // Strategy 2: without payment_id (column may not exist)
+    const { payment_id: _pid, ...withoutPaymentId } = insertPayload;
     const { data: d2, error: e2 } = await admin
       .from("appointments")
-      .insert(withoutTime)
+      .insert(withoutPaymentId)
       .select()
       .single();
 
@@ -119,8 +120,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(d2, { status: 201 });
     }
 
+    // Strategy 3: without appointment_time
+    const { appointment_time: _at, ...withoutTime } = withoutPaymentId;
+    const { data: d3, error: e3 } = await admin
+      .from("appointments")
+      .insert(withoutTime)
+      .select()
+      .single();
+
+    if (!e3 && d3) {
+      return NextResponse.json(d3, { status: 201 });
+    }
+
     return NextResponse.json(
-      { error: e2?.message || e1?.message || "Failed to create appointment" },
+      { error: e3?.message || e2?.message || e1?.message || "Failed to create appointment" },
       { status: 500 }
     );
   } catch (err: any) {
