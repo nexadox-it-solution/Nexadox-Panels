@@ -427,19 +427,141 @@ export async function POST(req: NextRequest) {
 
 /**
  * PATCH /api/admin/appointments
- * Updates appointment status. Also updates voucher if cancelled.
- * Body: { id, status }
+ * Updates appointment status OR generates missing voucher/invoice/transaction.
+ * Body: { id, status } — update status
+ * Body: { id, action: "generate-records" } — create missing voucher/invoice/transaction
  */
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, status } = body;
+    const { id, status, action } = body;
 
-    if (!id || !status) {
-      return NextResponse.json({ error: "id and status required." }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: "id is required." }, { status: 400 });
     }
 
-    const { error } = await getSupabaseAdmin()
+    const admin = getSupabaseAdmin();
+
+    /* ── Generate missing voucher/invoice/transaction ───────── */
+    if (action === "generate-records") {
+      const { data: apt, error: aptErr } = await admin
+        .from("appointments")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (aptErr || !apt) {
+        return NextResponse.json({ error: "Appointment not found." }, { status: 404 });
+      }
+
+      let doctorName = "Doctor";
+      let clinicName = "Clinic";
+      try {
+        const { data: d } = await admin.from("doctors").select("name").eq("id", apt.doctor_id).single();
+        if (d) doctorName = d.name;
+      } catch {}
+      if (apt.clinic_id) {
+        try {
+          const { data: c } = await admin.from("clinics").select("name").eq("id", apt.clinic_id).single();
+          if (c) clinicName = c.name;
+        } catch {}
+      }
+
+      const bookingAmount = Number(apt.booking_amount) || 0;
+      let voucherId = apt.voucher_id;
+      let invoiceId = apt.invoice_id;
+
+      // Create voucher if missing
+      if (!voucherId) {
+        try {
+          const vPayload: Record<string, any> = {
+            voucher_number: genVoucher(),
+            appointment_id: apt.id,
+            patient_name: apt.patient_name || "Patient",
+            doctor_name: doctorName,
+            clinic_name: clinicName,
+            appointment_date: apt.appointment_date,
+            appointment_slot: apt.slot,
+            booking_amount: bookingAmount,
+            commission_amount: Number(apt.commission_amount) || 0,
+            total_payable: Number(apt.payable_amount) || bookingAmount,
+            status: "active",
+            token_number: apt.token_number || 1,
+          };
+          const { data: vD, error: vE } = await admin.from("vouchers").insert(vPayload).select("id").single();
+          if (!vE && vD) voucherId = vD.id;
+          else {
+            delete vPayload.token_number;
+            const { data: vD2 } = await admin.from("vouchers").insert(vPayload).select("id").single();
+            if (vD2) voucherId = vD2.id;
+          }
+        } catch {}
+      }
+
+      // Create invoice if missing
+      if (!invoiceId) {
+        try {
+          const taxable = Number((bookingAmount / 1.18).toFixed(2));
+          const gst = Number((bookingAmount - taxable).toFixed(2));
+          const { data: iD } = await admin.from("invoices").insert({
+            txn_id: genTxn(),
+            booking_id: apt.appointment_id,
+            user_name: (apt.patient_name || "Patient").trim(),
+            user_email: apt.patient_email || "",
+            user_id: String(apt.doctor_id),
+            invoice_number: genInvoice(),
+            invoice_date: apt.appointment_date,
+            taxable_amount: taxable,
+            gst_amount: gst,
+            gst: gst,
+            total_amount: bookingAmount,
+            gst_percentage: 18,
+            status: "issued",
+            appointment_id: apt.id,
+          }).select("id").single();
+          if (iD) invoiceId = iD.id;
+        } catch {}
+      }
+
+      // Create patient_transaction if missing
+      try {
+        const { data: existTxn } = await admin
+          .from("patient_transactions")
+          .select("id")
+          .eq("booking_id", apt.appointment_id)
+          .limit(1);
+        if (!existTxn || existTxn.length === 0) {
+          await admin.from("patient_transactions").insert({
+            txn_id: genTxn(),
+            booking_id: apt.appointment_id,
+            user_name: (apt.patient_name || "Patient").trim(),
+            user_email: apt.patient_email || "",
+            reason: `Appointment booking: ${doctorName} at ${clinicName}`,
+            amount: bookingAmount,
+            balance: 0,
+            status: "completed",
+            started_on: apt.appointment_date,
+          });
+        }
+      } catch {}
+
+      // Update appointment with voucher_id + invoice_id
+      if (voucherId || invoiceId) {
+        const upd: Record<string, any> = { updated_at: new Date().toISOString() };
+        if (voucherId) upd.voucher_id = voucherId;
+        if (invoiceId) upd.invoice_id = invoiceId;
+        await admin.from("appointments").update(upd).eq("id", id);
+      }
+
+      return NextResponse.json({ success: true, voucher_id: voucherId, invoice_id: invoiceId });
+    }
+
+    /* ── Status update (original logic) ────────────────────── */
+    if (!status) {
+      return NextResponse.json({ error: "status or action required." }, { status: 400 });
+    }
+
+    const { error } = await admin
       .from("appointments")
       .update({ status, updated_at: new Date().toISOString() })
       .eq("id", id);
@@ -448,13 +570,13 @@ export async function PATCH(req: NextRequest) {
 
     // If cancelled, also cancel the voucher
     if (status === "cancelled") {
-      const { data: apt } = await getSupabaseAdmin()
+      const { data: apt } = await admin
         .from("appointments")
         .select("voucher_id")
         .eq("id", id)
         .single();
       if (apt?.voucher_id) {
-        await getSupabaseAdmin()
+        await admin
           .from("vouchers")
           .update({ status: "cancelled" })
           .eq("id", apt.voucher_id);

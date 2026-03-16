@@ -438,7 +438,25 @@ export default function AppointmentsPage() {
 
   /* ── View voucher (via service role) ─────────────────────── */
   const openVoucher = async (apt: Appointment) => {
-    if (!apt.voucher_id) return;
+    // If no voucher exists, generate records first
+    if (!apt.voucher_id) {
+      try {
+        const res = await fetch("/api/admin/appointments", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: apt.id, action: "generate-records" }),
+        });
+        const result = await res.json();
+        if (result.voucher_id) {
+          apt.voucher_id = result.voucher_id;
+          apt.invoice_id = result.invoice_id;
+          // Update local state
+          setAppointments(prev => prev.map(a => a.id === apt.id ? { ...a, voucher_id: result.voucher_id, invoice_id: result.invoice_id } : a));
+        } else {
+          return;
+        }
+      } catch (err) { console.error(err); return; }
+    }
     try {
       const { data } = await supabase.from("vouchers").select("*").eq("id", apt.voucher_id).single();
       if (data) setViewVoucher({ ...(data as VoucherView), _apt: apt } as any);
@@ -777,11 +795,9 @@ export default function AppointmentsPage() {
                       </td>
                       <td className="py-3 px-3">
                         <div className="flex items-center gap-1">
-                          {apt.voucher_id && (
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-purple-600" title="View Voucher" onClick={() => openVoucher(apt)}>
-                              <FileText className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-purple-600" title="View Voucher" onClick={() => openVoucher(apt)}>
+                            <FileText className="h-3.5 w-3.5" />
+                          </Button>
                           {apt.status === "scheduled" && (
                             <>
                               <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" title="Complete" onClick={() => updateStatus(apt, "completed")}>
