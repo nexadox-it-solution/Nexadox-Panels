@@ -37,10 +37,25 @@ export async function GET() {
     const attendantDetails = attRows || [];
 
     // 3. Build lookup: profile_id | user_id -> attendant details
+    //    Prefer rows that have profile_id set AND contain actual assignment data
     const attByProfileId: Record<string, any> = {};
     attendantDetails.forEach((a: any) => {
-      if (a.profile_id) attByProfileId[String(a.profile_id)] = a;
-      else if (a.user_id) attByProfileId[String(a.user_id)] = a;
+      const key = a.profile_id ? String(a.profile_id) : (a.user_id ? String(a.user_id) : null);
+      if (!key) return;
+      const existing = attByProfileId[key];
+      // Keep the row that has more data (assignments or profile_id set)
+      if (!existing) {
+        attByProfileId[key] = a;
+      } else {
+        const existingHasData = (existing.assigned_doctors?.length > 0 || existing.assigned_clinic_ids?.length > 0);
+        const newHasData = (a.assigned_doctors?.length > 0 || a.assigned_clinic_ids?.length > 0);
+        // Prefer row with assignment data; if tied, prefer the one with profile_id
+        if (newHasData && !existingHasData) {
+          attByProfileId[key] = a;
+        } else if (!existingHasData && !newHasData && a.profile_id && !existing.profile_id) {
+          attByProfileId[key] = a;
+        }
+      }
     });
 
     // 4. Merge: profiles LEFT JOIN attendants

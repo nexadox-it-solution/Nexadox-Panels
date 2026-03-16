@@ -85,8 +85,8 @@ export async function PATCH(req: NextRequest) {
           .select("id");
         if (upd1 && upd1.length > 0) saved = true;
 
-        // Fallback: try user_id column
-        if (!saved) {
+        // Fallback: try user_id column (INT — only works for integer IDs)
+        if (!saved && !isUuid) {
           const { data: upd2 } = await admin
             .from("agents")
             .update(agentUpdate)
@@ -96,20 +96,35 @@ export async function PATCH(req: NextRequest) {
         }
 
         // If no row was updated, INSERT a new agent row
+        // user_id is INT — look up the integer id from users table
         if (!saved && isUuid) {
+          let intUserId: number | null = null;
+          try {
+            const { data: userRow } = await admin
+              .from("users")
+              .select("id")
+              .eq("auth_user_id", user_id)
+              .single();
+            if (userRow) intUserId = userRow.id;
+          } catch {}
+
+          const insertPayload: Record<string, any> = {
+            profile_id: user_id,
+            wallet_balance: 0,
+            commission_type: commission_type || "percentage",
+            commission_value: commission_value ?? 10,
+            approval_status: approval_status || "pending",
+            ...agentUpdate,
+          };
+          if (intUserId) insertPayload.user_id = intUserId;
+
           const { error: insErr } = await admin
             .from("agents")
-            .insert({
-              user_id: user_id,
-              profile_id: user_id,
-              wallet_balance: 0,
-              commission_type: commission_type || "percentage",
-              commission_value: commission_value ?? 10,
-              approval_status: approval_status || "pending",
-              ...agentUpdate,
-            });
+            .insert(insertPayload);
           if (insErr) {
             console.warn("Agent insert fallback warning:", insErr.message);
+          } else {
+            saved = true;
           }
         }
       }
@@ -134,41 +149,94 @@ export async function PATCH(req: NextRequest) {
       if (Object.keys(attUpdate).length > 0) {
         let saved = false;
 
-        // Try update by attendant_id first
+        // Try update by attendant_id first (if row already exists)
         if (attendant_id) {
-          const { data: upd } = await admin
+          const { data: upd, error: updErr } = await admin
             .from("attendants")
             .update(attUpdate)
             .eq("id", attendant_id)
             .select("id");
+          if (updErr) console.warn("Attendant update by id warning:", updErr.message);
           if (upd && upd.length > 0) saved = true;
         }
 
         // Try update by profile_id
         if (!saved && isUuid) {
-          const { data: upd2 } = await admin
+          const { data: upd2, error: upd2Err } = await admin
             .from("attendants")
             .update(attUpdate)
             .eq("profile_id", user_id)
             .select("id");
+          if (upd2Err) console.warn("Attendant update by profile_id warning:", upd2Err.message);
           if (upd2 && upd2.length > 0) saved = true;
         }
 
         // If no row was updated, INSERT a new attendant row
+        // user_id column is INT — look up the integer id from users table
         if (!saved && isUuid) {
+          let intUserId: number | null = null;
+          try {
+            const { data: userRow } = await admin
+              .from("users")
+              .select("id")
+              .eq("auth_user_id", user_id)
+              .single();
+            if (userRow) intUserId = userRow.id;
+          } catch {}
+
+          // Get profile info for the insert
+          let profileName = name || "";
+          let profileEmail = "";
+          let profilePhone = phone || null;
+          if (!profileName) {
+            try {
+              const { data: prof } = await admin.from("profiles").select("name, email, phone").eq("id", user_id).single();
+              if (prof) {
+                profileName = prof.name || "";
+                profileEmail = prof.email || "";
+                profilePhone = profilePhone || prof.phone || null;
+              }
+            } catch {}
+          }
+
+          const insertPayload: Record<string, any> = {
+            profile_id: user_id,
+            full_name: profileName,
+            email: profileEmail,
+            phone: profilePhone,
+            status: status || "active",
+            ...attUpdate,
+          };
+          if (intUserId) insertPayload.user_id = intUserId;
+
           const { error: insErr } = await admin
             .from("attendants")
-            .insert({
-              user_id: user_id,
-              profile_id: user_id,
-              full_name: name || "",
-              email: "",
-              phone: phone || null,
-              status: status || "active",
-              ...attUpdate,
-            });
+            .insert(insertPayload);
           if (insErr) {
-            console.warn("Attendant insert fallback warning:", insErr.message);
+            console.warn("Attendant insert warning:", insErr.message);
+            // If user_id NOT NULL constraint fails, try making it nullable then retry
+            if (insErr.message.includes("user_id") && !intUserId) {
+              // Try without user_id by using a placeholder 0
+              const { error: insErr2 } = await admin
+                .from("attendants")
+                .insert({ ...insertPayload, user_id: 0 });
+              if (insErr2) {
+                console.warn("Attendant insert retry warning:", insErr2.message);
+                return NextResponse.json(
+                  { error: `Failed to save attendant assignments: ${insErr2.message}` },
+                  { status: 500 }
+                );
+              } else {
+                saved = true;
+              }
+            } else {
+              return NextResponse.json(
+                { error: `Failed to save attendant assignments: ${insErr.message}` },
+                { status: 500 }
+              );
+            }
+          } else {
+            saved = true;
           }
         }
       }
