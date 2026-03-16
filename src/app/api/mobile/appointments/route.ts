@@ -148,6 +148,7 @@ export async function POST(req: NextRequest) {
     // ── Fetch doctor & clinic names for voucher/invoice ─────
     let doctorName = "Doctor";
     let clinicName = "Clinic";
+    let patientEmail = "";
     try {
       const { data: docRow } = await admin.from("doctors").select("name").eq("id", doctor_id).single();
       if (docRow) doctorName = docRow.name;
@@ -156,6 +157,13 @@ export async function POST(req: NextRequest) {
       try {
         const { data: clinicRow } = await admin.from("clinics").select("name").eq("id", clinic_id).single();
         if (clinicRow) clinicName = clinicRow.name;
+      } catch {}
+    }
+    // Fetch patient email from patients table
+    if (patient_id) {
+      try {
+        const { data: patient } = await admin.from("patients").select("email").eq("id", patient_id).single();
+        if (patient?.email) patientEmail = patient.email;
       } catch {}
     }
 
@@ -212,7 +220,7 @@ export async function POST(req: NextRequest) {
           txn_id: genTxn(),
           booking_id: aptData.appointment_id,
           user_name: (patient_name || "Patient").trim(),
-          user_email: "",
+          user_email: patientEmail,
           user_id: String(doctor_id),
           invoice_number: genInvoice(),
           invoice_date: appointment_date,
@@ -238,7 +246,7 @@ export async function POST(req: NextRequest) {
         txn_id: genTxn(),
         booking_id: aptData.appointment_id,
         user_name: (patient_name || "Patient").trim(),
-        user_email: "",
+        user_email: patientEmail,
         reason: `Appointment booking: ${doctorName} at ${clinicName}`,
         amount: bookingAmount,
         balance: 0,

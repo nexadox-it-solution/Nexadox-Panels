@@ -466,6 +466,14 @@ export async function PATCH(req: NextRequest) {
           if (c) clinicName = c.name;
         } catch {}
       }
+      // Resolve patient email from patients/profiles if not on appointment
+      let patientEmail = apt.patient_email || "";
+      if (!patientEmail && apt.patient_id) {
+        try {
+          const { data: p } = await admin.from("patients").select("email").eq("id", apt.patient_id).single();
+          if (p?.email) patientEmail = p.email;
+        } catch {}
+      }
 
       const bookingAmount = Number(apt.booking_amount) || 0;
       let voucherId = apt.voucher_id;
@@ -507,7 +515,7 @@ export async function PATCH(req: NextRequest) {
             txn_id: genTxn(),
             booking_id: apt.appointment_id,
             user_name: (apt.patient_name || "Patient").trim(),
-            user_email: apt.patient_email || "",
+            user_email: patientEmail,
             user_id: String(apt.doctor_id),
             invoice_number: genInvoice(),
             invoice_date: apt.appointment_date,
@@ -535,7 +543,7 @@ export async function PATCH(req: NextRequest) {
             txn_id: genTxn(),
             booking_id: apt.appointment_id,
             user_name: (apt.patient_name || "Patient").trim(),
-            user_email: apt.patient_email || "",
+            user_email: patientEmail,
             reason: `Appointment booking: ${doctorName} at ${clinicName}`,
             amount: bookingAmount,
             balance: 0,
