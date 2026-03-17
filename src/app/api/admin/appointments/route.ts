@@ -15,8 +15,11 @@ const genId = () =>
   "APT" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
 const genVoucher = () =>
   "VCH" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
-const genInvoice = () =>
-  "INV" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
+async function getNextInvoiceNumber(sb: any): Promise<string> {
+  const { data } = await sb.from("invoices").select("id").order("id", { ascending: false }).limit(1).single();
+  const nextNum = ((data as any)?.id || 0) + 1;
+  return "INV" + String(nextNum).padStart(8, "0");
+}
 const genTxn = () =>
   "TXN" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
 
@@ -291,7 +294,7 @@ export async function POST(req: NextRequest) {
     /* ──────────────────────────────────────────────────────────
        4. CREATE INVOICE
     ────────────────────────────────────────────────────────── */
-    const invoiceNumber = genInvoice();
+    const invoiceNumber = await getNextInvoiceNumber(getSupabaseAdmin());
     let invoiceId: number | null = null;
     const taxableAmount = Number((payable_amount / 1.18).toFixed(2));
     const gstAmount = Number((payable_amount - taxableAmount).toFixed(2));
@@ -517,7 +520,7 @@ export async function PATCH(req: NextRequest) {
             user_name: (apt.patient_name || "Patient").trim(),
             user_email: patientEmail,
             user_id: String(apt.doctor_id),
-            invoice_number: genInvoice(),
+            invoice_number: await getNextInvoiceNumber(admin),
             invoice_date: apt.appointment_date,
             taxable_amount: taxable,
             gst_amount: gst,

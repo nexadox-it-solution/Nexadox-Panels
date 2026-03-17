@@ -21,8 +21,11 @@ const genId = () =>
   "APT" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
 const genVoucher = () =>
   "VCH" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
-const genInvoice = () =>
-  "INV" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
+async function getNextInvoiceNumber(sb: any): Promise<string> {
+  const { data } = await sb.from("invoices").select("id").order("id", { ascending: false }).limit(1).single();
+  const nextNum = ((data as any)?.id || 0) + 1;
+  return "INV" + String(nextNum).padStart(8, "0");
+}
 const genTxn = () =>
   "TXN" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
 
@@ -222,7 +225,7 @@ export async function POST(req: NextRequest) {
           user_name: (patient_name || "Patient").trim(),
           user_email: patientEmail,
           user_id: String(doctor_id),
-          invoice_number: genInvoice(),
+          invoice_number: await getNextInvoiceNumber(admin),
           invoice_date: appointment_date,
           taxable_amount: taxableAmount,
           gst_amount: gstAmount,

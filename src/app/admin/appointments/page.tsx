@@ -49,6 +49,7 @@ interface Appointment {
   notes: string | null;
   created_at: string;
   token_number: number | null;
+  patient_id: number | null;
 }
 
 interface VoucherView {
@@ -64,6 +65,8 @@ interface VoucherView {
   total_payable: number | null;
   status: string;
   token_number: number | null;
+  _apt?: Appointment;
+  _invoice_number?: string;
 }
 
 /* ─── Sessions (replaces time slots) ────────────────────────── */
@@ -459,7 +462,12 @@ export default function AppointmentsPage() {
     }
     try {
       const { data } = await supabase.from("vouchers").select("*").eq("id", apt.voucher_id).single();
-      if (data) setViewVoucher({ ...(data as VoucherView), _apt: apt } as any);
+      let invoiceNumber = "";
+      if (apt.invoice_id) {
+        const { data: inv } = await supabase.from("invoices").select("invoice_number").eq("id", apt.invoice_id).single();
+        if (inv) invoiceNumber = inv.invoice_number;
+      }
+      if (data) setViewVoucher({ ...(data as VoucherView), _apt: apt, _invoice_number: invoiceNumber });
     } catch (err) { console.error(err); }
   };
 
@@ -500,11 +508,11 @@ export default function AppointmentsPage() {
   </div>
   <div class="slip-title">BOOKING SLIP</div>
   <div class="info-grid">
-    <div class="info-row"><span class="info-label">UHID No.:</span><span class="info-value">UHID-${String(aptExtra?.id || v.id).toString().padStart(6, '0')}</span></div>
-    <div class="info-row"><span class="info-label">Bill No.:</span><span class="info-value">BILL-${v.voucher_number}</span></div>
-    <div class="info-row"><span class="info-label">Patient Name:</span><span class="info-value">${v.patient_name}</span></div>
+    <div class="info-row"><span class="info-label">UHID No.:</span><span class="info-value">UHID${String(aptExtra?.patient_id || 0).padStart(8, '0')}</span></div>
+    <div class="info-row"><span class="info-label">Bill No.:</span><span class="info-value">${v._invoice_number || v.voucher_number}</span></div>
+    <div class="info-row"><span class="info-label">Booking ID:</span><span class="info-value">${aptExtra?.appointment_id || '—'}</span></div>
     <div class="info-row"><span class="info-label">Bill Date:</span><span class="info-value">${v.appointment_date}</span></div>
-    <div class="info-row"><span class="info-label">Gender:</span><span class="info-value">—</span></div>
+    <div class="info-row"><span class="info-label">Patient Name:</span><span class="info-value">${v.patient_name}</span></div>
     <div class="info-row"><span class="info-label">Doctor Name:</span><span class="info-value">${v.doctor_name}</span></div>
     <div class="info-row"><span class="info-label">Contact No.:</span><span class="info-value">${aptExtra?.patient_phone || aptExtra?.patient_email || '—'}</span></div>
     <div class="info-row"><span class="info-label">Address:</span><span class="info-value">${v.clinic_name}</span></div>
@@ -840,12 +848,13 @@ export default function AppointmentsPage() {
 
             {/* Patient & Booking Info */}
             <div className="px-5 grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
-              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">UHID No.:</span><span className="text-gray-600">UHID-{String((viewVoucher as any)._apt?.id || viewVoucher.id).padStart(6, '0')}</span></div>
-              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Bill No.:</span><span className="text-gray-600">BILL-{viewVoucher.voucher_number}</span></div>
-              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Patient Name:</span><span className="text-gray-600">{viewVoucher.patient_name}</span></div>
+              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">UHID No.:</span><span className="text-gray-600">UHID{String(viewVoucher._apt?.patient_id || 0).padStart(8, '0')}</span></div>
+              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Bill No.:</span><span className="text-gray-600">{viewVoucher._invoice_number || viewVoucher.voucher_number}</span></div>
+              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Booking ID:</span><span className="text-gray-600">{viewVoucher._apt?.appointment_id || "—"}</span></div>
               <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Bill Date:</span><span className="text-gray-600">{fmtDate(viewVoucher.appointment_date)}</span></div>
-              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Contact No.:</span><span className="text-gray-600">{(viewVoucher as any)._apt?.patient_phone || (viewVoucher as any)._apt?.patient_email || "—"}</span></div>
+              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Patient Name:</span><span className="text-gray-600">{viewVoucher.patient_name}</span></div>
               <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Doctor Name:</span><span className="text-gray-600">{viewVoucher.doctor_name}</span></div>
+              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Contact No.:</span><span className="text-gray-600">{viewVoucher._apt?.patient_phone || viewVoucher._apt?.patient_email || "—"}</span></div>
               <div className="flex gap-2 col-span-2"><span className="font-semibold text-gray-700 min-w-[100px]">Address:</span><span className="text-gray-600">{viewVoucher.clinic_name}</span></div>
             </div>
 
