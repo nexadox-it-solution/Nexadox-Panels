@@ -73,7 +73,7 @@ export default function InvoiceDetailPage() {
   }
 
   const invoiceData = {
-    invoiceNumber: invoice.invoice_number,
+    invoiceNumber: "INV" + String(invoice.id).padStart(8, "0"),
     date: invoice.invoice_date,
     company: {
       name: "Nexadox Healthcare Solutions",
@@ -111,7 +111,7 @@ export default function InvoiceDetailPage() {
     const element = invoiceRef.current;
     const opt = {
       margin: 10,
-      filename: `${invoiceData.invoiceNumber}.pdf`,
+      filename: `INV${String(invoice!.id).padStart(8, "0")}.pdf`,
       image: { type: "jpeg" as const, quality: 0.98 },
       html2canvas: { scale: 2 },
       jsPDF: { orientation: "portrait" as const, unit: "mm" as const, format: "a4" as const },

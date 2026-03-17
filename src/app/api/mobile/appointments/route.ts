@@ -21,11 +21,6 @@ const genId = () =>
   "APT" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
 const genVoucher = () =>
   "VCH" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
-async function getNextInvoiceNumber(sb: any): Promise<string> {
-  const { data } = await sb.from("invoices").select("id").order("id", { ascending: false }).limit(1).single();
-  const nextNum = ((data as any)?.id || 0) + 1;
-  return "INV" + String(nextNum).padStart(8, "0");
-}
 const genTxn = () =>
   "TXN" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 6).toUpperCase();
 
@@ -225,7 +220,7 @@ export async function POST(req: NextRequest) {
           user_name: (patient_name || "Patient").trim(),
           user_email: patientEmail,
           user_id: String(doctor_id),
-          invoice_number: await getNextInvoiceNumber(admin),
+          invoice_number: "PENDING",
           invoice_date: appointment_date,
           taxable_amount: taxableAmount,
           gst_amount: gstAmount,
@@ -237,7 +232,11 @@ export async function POST(req: NextRequest) {
         })
         .select("id")
         .single();
-      if (!invErr && invData) invoiceId = invData.id;
+      if (!invErr && invData) {
+        invoiceId = invData.id;
+        const invoiceNumber = "INV" + String(invData.id).padStart(8, "0");
+        await admin.from("invoices").update({ invoice_number: invoiceNumber }).eq("id", invData.id);
+      }
       else console.error("Mobile invoice insert error:", invErr?.message);
     } catch (e) {
       console.error("Mobile invoice creation error:", e);

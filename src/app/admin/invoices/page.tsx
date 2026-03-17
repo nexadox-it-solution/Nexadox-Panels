@@ -27,6 +27,7 @@ interface Invoice {
   gst: string;
   invoice_number: string;
   invoice_date: string;
+  appointment_id: number | null;
 }
 
 export default function InvoicesPage() {
@@ -182,14 +183,14 @@ export default function InvoicesPage() {
                 filteredInvoices.map((invoice) => (
                   <tr key={invoice.id} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800">
                     <td className="p-3 text-sm">{invoice.txn_id}</td>
-                    <td className="p-3 text-sm">{invoice.booking_id}</td>
+                    <td className="p-3 text-sm">NXD{String(invoice.appointment_id || 0).padStart(8, '0')}</td>
                     <td className="p-3 text-sm">{invoice.user_id}</td>
                     <td className="p-3 text-sm font-medium">{invoice.user_name}</td>
                     <td className="p-3 text-sm">{invoice.user_email}</td>
                     <td className="p-3 text-sm font-medium">{invoice.total_amount}</td>
                     <td className="p-3 text-sm">{invoice.taxable_amount}</td>
                     <td className="p-3 text-sm">{invoice.gst}</td>
-                    <td className="p-3 text-sm">{invoice.invoice_number}</td>
+                    <td className="p-3 text-sm">INV{String(invoice.id).padStart(8, '0')}</td>
                     <td className="p-3 text-sm">{invoice.invoice_date}</td>
                     <td className="p-3 text-sm">
                       <Link href={`/admin/invoices/${invoice.id}`}>
