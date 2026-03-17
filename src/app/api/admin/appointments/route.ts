@@ -119,6 +119,15 @@ export async function POST(req: NextRequest) {
     const appointmentTime = SESSION_TIME_MAP[slot] || "09:00";
 
     /* ──────────────────────────────────────────────────────────
+       0a. FETCH DOCTOR'S APPOINTMENT FEE (consultation fee at clinic)
+    ────────────────────────────────────────────────────────── */
+    let doctorAppointmentFee = 0;
+    try {
+      const { data: docData } = await getSupabaseAdmin().from("doctors").select("appointment_fee").eq("id", doctor_id).single();
+      if (docData?.appointment_fee) doctorAppointmentFee = Number(docData.appointment_fee);
+    } catch {}
+
+    /* ──────────────────────────────────────────────────────────
        0. UPSERT PATIENT RECORD
        Ensures every booked patient exists in the patients table.
     ────────────────────────────────────────────────────────── */
@@ -199,6 +208,7 @@ export async function POST(req: NextRequest) {
       booking_amount,
       commission_amount,
       payable_amount,
+      consultation_fee: doctorAppointmentFee,
       notes: notes || null,
       token_number: assignedToken,
     };
