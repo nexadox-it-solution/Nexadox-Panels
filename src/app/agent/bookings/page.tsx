@@ -276,9 +276,8 @@ export default function BookingsPage() {
             {/* Patient & Booking Info */}
             <div className="px-5 grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
               <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">UHID No.:</span><span className="text-gray-600">UHID{String(viewVoucher._apt?.patient_id || 0).padStart(8, '0')}</span></div>
-              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Bill No.:</span><span className="text-gray-600">{viewVoucher._invoice_number || viewVoucher.voucher_number}</span></div>
-              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Booking ID:</span><span className="text-gray-600">{viewVoucher._apt?.appointment_id || "—"}</span></div>
-              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Bill Date:</span><span className="text-gray-600">{fmtDate(viewVoucher.appointment_date)}</span></div>
+              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Booking ID:</span><span className="text-gray-600">NXD{String(viewVoucher._apt?.id || 0).padStart(8, '0')}</span></div>
+              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Date:</span><span className="text-gray-600">{fmtDate(viewVoucher.appointment_date)}</span></div>
               <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Patient Name:</span><span className="text-gray-600">{viewVoucher.patient_name}</span></div>
               <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Doctor:</span><span className="text-gray-600">{viewVoucher.doctor_name}</span></div>
               <div className="flex gap-2 col-span-2"><span className="font-semibold text-gray-700 min-w-[100px]">Clinic:</span><span className="text-gray-600">{viewVoucher.clinic_name}</span></div>
