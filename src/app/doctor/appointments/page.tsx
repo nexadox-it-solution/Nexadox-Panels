@@ -159,7 +159,6 @@ export default function AppointmentsPage() {
                   <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Patient</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Date</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Slot</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Symptoms</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Status</th>
                   <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">Actions</th>
                 </tr>
@@ -176,7 +175,6 @@ export default function AppointmentsPage() {
                     </td>
                     <td className="py-3 px-4 text-sm">{appointment.appointment_date ? new Date(appointment.appointment_date).toLocaleDateString("en-IN") : "—"}</td>
                     <td className="py-3 px-4 text-sm">{appointment.slot || appointment.appointment_time || "—"}</td>
-                    <td className="py-3 px-4 text-sm max-w-xs truncate">{appointment.symptoms || "—"}</td>
                     <td className="py-3 px-4">{getStatusBadge(appointment.status)}</td>
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-center gap-1">

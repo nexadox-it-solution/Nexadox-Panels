@@ -198,11 +198,10 @@ export default function DoctorDashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {[
           { label: "Today's Appointments", value: todayAppts.length, sub: `${completedToday} completed`, icon: Calendar, color: "text-blue-600", subColor: "text-green-600" },
           { label: "In Queue", value: inQueue, sub: "Patients waiting", icon: Clock, color: "text-orange-600", subColor: "text-muted-foreground" },
-          { label: "Today's Earnings", value: inr(todayEarnings), sub: `Month: ${inr(monthEarnings)}`, icon: IndianRupee, color: "text-emerald-600", subColor: "text-emerald-600" },
           { label: "Total Patients", value: totalPatients.toLocaleString("en-IN"), sub: "Lifetime", icon: Users, color: "text-green-600", subColor: "text-muted-foreground" },
         ].map(s => (
           <Card key={s.label}>

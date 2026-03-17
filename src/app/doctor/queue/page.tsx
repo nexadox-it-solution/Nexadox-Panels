@@ -194,20 +194,12 @@ export default function QueuePage() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div><p className="text-sm text-muted-foreground">In Queue</p><p className="text-3xl font-bold mt-1 text-blue-600">{totalInQueue}</p></div>
               <Clock className="h-8 w-8 text-blue-600 opacity-30" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div><p className="text-sm text-muted-foreground">Avg Wait Time</p><p className="text-3xl font-bold mt-1 text-purple-600">{avgWait}m</p></div>
-              <Timer className="h-8 w-8 text-purple-600 opacity-30" />
             </div>
           </CardContent>
         </Card>
@@ -240,7 +232,7 @@ export default function QueuePage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-gray-50 dark:bg-gray-800/50">
-                  {["#", "Patient", "Age", "Gender", "Type", "Check-In Time", "Wait", "Vitals", "Actions"].map(h => (
+                  {["#", "Patient", "Age", "Gender", "Type", "Check-In Time", "Vitals", "Actions"].map(h => (
                     <th key={h} className="py-3 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide text-left">{h}</th>
                   ))}
                 </tr>
@@ -277,12 +269,6 @@ export default function QueuePage() {
                       </td>
                       {/* Check-in time */}
                       <td className="py-3 px-3 text-xs font-mono">{fmtTime(apt.checkin_time)}</td>
-                      {/* Wait */}
-                      <td className="py-3 px-3">
-                        <span className={`text-xs font-semibold ${wait > 30 ? "text-red-600" : wait > 15 ? "text-orange-600" : "text-green-600"}`}>
-                          {wait}m
-                        </span>
-                      </td>
                       {/* Vitals summary */}
                       <td className="py-3 px-3 text-xs">
                         {vitals ? (

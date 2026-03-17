@@ -136,9 +136,6 @@ export default function SettingsPage() {
 
   const tabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
     { key: "profile", label: "Profile", icon: User },
-    { key: "account", label: "Account", icon: Stethoscope },
-    { key: "notifications", label: "Notifications", icon: Bell },
-    { key: "security", label: "Security", icon: Shield },
   ];
 
   return (
@@ -177,8 +174,8 @@ export default function SettingsPage() {
                   <p className="text-muted-foreground">{profileData.specialty}</p>
                   <p className="text-sm text-muted-foreground mt-1">{profileData.experience} years of experience</p>
                 </div>
-                <Button variant={isEditing ? "outline" : "default"} onClick={() => setIsEditing(!isEditing)} className="gap-2">
-                  {isEditing ? "Cancel" : <><Edit className="h-4 w-4" />Edit Profile</>}
+                <Button variant="outline" disabled className="gap-2 opacity-50 cursor-not-allowed">
+                  <Lock className="h-4 w-4" />Profile Locked
                 </Button>
               </div>
             </CardContent>
