@@ -506,10 +506,10 @@ export default function AdminPatientsPage() {
 
       {/* ── Patient Details Sidebar Drawer ─────────────────────── */}
       {selectedPatient && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex justify-end" onClick={() => setSelectedPatient(null)}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex justify-end overflow-hidden" onClick={() => setSelectedPatient(null)}>
           <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
           <div
-            className="relative bg-white dark:bg-gray-900 h-full w-full max-w-[520px] shadow-2xl border-l border-gray-200 dark:border-gray-700 overflow-y-auto flex flex-col"
+            className="relative bg-white dark:bg-gray-900 h-full w-full max-w-[520px] shadow-2xl border-l border-gray-200 dark:border-gray-700 overflow-y-auto overflow-x-hidden flex flex-col"
             style={{ animation: "slideInRight 0.25s ease-out" }}
             onClick={(e) => e.stopPropagation()}
           >

@@ -711,10 +711,10 @@ export default function AttendantPatientsPage() {
 
       {/* ── Patient Details Sidebar Drawer ─────────────────────── */}
       {selectedPatient && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex justify-end" onClick={() => setSelectedPatient(null)}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex justify-end overflow-hidden" onClick={() => setSelectedPatient(null)}>
           <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
           <div
-            className="relative bg-white dark:bg-gray-900 h-full w-full max-w-[520px] shadow-2xl border-l border-gray-200 dark:border-gray-700 overflow-y-auto flex flex-col"
+            className="relative bg-white dark:bg-gray-900 h-full w-full max-w-[520px] shadow-2xl border-l border-gray-200 dark:border-gray-700 overflow-y-auto overflow-x-hidden flex flex-col"
             style={{ animation: "slideInRight 0.25s ease-out" }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -757,15 +757,15 @@ export default function AttendantPatientsPage() {
                     const docName = record.doctor_id ? doctorMap.get(record.doctor_id) : null;
                     const clName = record.clinic_id ? clinicMap.get(record.clinic_id) : null;
                     return (
-                      <div key={record.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3 flex-wrap">
+                      <div key={record.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow overflow-hidden">
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <div className="flex items-center gap-3 mr-auto">
                             <span className="text-sm font-medium text-muted-foreground">
                               {new Date(record.appointment_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                             </span>
                             {record.slot && <span className="text-xs text-muted-foreground bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">{record.slot}</span>}
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
                               record.status === "completed" ? "bg-green-100 text-green-700" :
                               record.status === "cancelled" ? "bg-red-100 text-red-700" :
