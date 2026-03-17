@@ -8,6 +8,7 @@ import {
   Users, Search, Eye, FileText, Phone, Mail, Calendar,
   Activity, X, ChevronLeft, ChevronRight, Loader, Download,
   Pill, Stethoscope, ClipboardList, ArrowLeft, Building2,
+  Upload, Image, Camera,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -20,6 +21,7 @@ interface PrescriptionRow {
   patient_name: string; diagnosis: string; notes: string | null;
   medicines: Medicine[]; tests: TestItem[];
   follow_up_date: string | null; created_at: string;
+  manual_prescription_url?: string | null;
 }
 
 interface VitalsRow {
@@ -62,6 +64,12 @@ export default function AttendantPatientsPage() {
   const [viewingApt, setViewingApt] = useState<AppointmentRecord | null>(null);
   const [downloading, setDownloading] = useState(false);
   const rxRef = useRef<HTMLDivElement>(null);
+
+  /* Manual Rx upload */
+  const [uploading, setUploading] = useState<number | null>(null);
+  const [viewingManualRx, setViewingManualRx] = useState<{ url: string; patientName: string; date: string; aptId: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadTargetAptId, setUploadTargetAptId] = useState<number | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -235,6 +243,103 @@ export default function AttendantPatientsPage() {
     finally { setDownloading(false); }
   };
 
+  /* ── Upload manual prescription (attendant) ──────────────── */
+  const handleUploadManualRx = (aptId: number, patientName: string) => {
+    setUploadTargetAptId(aptId);
+    fileInputRef.current?.click();
+  };
+
+  const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !uploadTargetAptId) return;
+    if (!file.type.startsWith("image/")) { alert("Please select an image file"); return; }
+    if (file.size > 5 * 1024 * 1024) { alert("Image must be under 5 MB"); return; }
+
+    setUploading(uploadTargetAptId);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("bucket", "prescriptions");
+      formData.append("path", `manual_rx_${uploadTargetAptId}_${Date.now()}`);
+      const res = await fetch("/api/admin/upload-image", { method: "POST", body: formData });
+      if (!res.ok) throw new Error("Upload failed");
+      const uploadData = await res.json();
+
+      const existingRx = prescriptions.get(uploadTargetAptId);
+      if (existingRx) {
+        const { error } = await supabase.from("prescriptions").update({ manual_prescription_url: uploadData.url }).eq("id", existingRx.id);
+        if (error) { console.error(error); alert("Failed to update prescription"); return; }
+        existingRx.manual_prescription_url = uploadData.url;
+        setPrescriptions(new Map(prescriptions));
+      } else {
+        let patName = "Patient";
+        for (const p of patients) {
+          const apt = p.appointments.find(a => a.id === uploadTargetAptId);
+          if (apt) { patName = p.name; break; }
+        }
+        const { data: newRx, error } = await supabase.from("prescriptions").insert({
+          appointment_id: uploadTargetAptId,
+          doctor_id: 0,
+          patient_name: patName,
+          diagnosis: "Manual Prescription",
+          medicines: [],
+          tests: [],
+          manual_prescription_url: uploadData.url,
+        }).select().single();
+        if (error) { console.error(error); alert("Failed to save prescription record"); return; }
+        if (newRx) {
+          prescriptions.set(uploadTargetAptId, newRx as PrescriptionRow);
+          setPrescriptions(new Map(prescriptions));
+        }
+      }
+      alert("Manual prescription uploaded successfully!");
+    } catch (err: any) {
+      console.error("Upload error:", err);
+      alert("Upload failed: " + (err.message || "Unknown error"));
+    } finally {
+      setUploading(null);
+      setUploadTargetAptId(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  /* ── Download manual Rx as PDF ────────────────────────────── */
+  const downloadManualRxPDF = async (imageUrl: string, patientName: string, date: string) => {
+    setDownloading(true);
+    try {
+      const html2pdf = (await import("html2pdf.js")).default;
+      const container = document.createElement("div");
+      container.innerHTML = `
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #1e40af, #3b82f6); color: white; padding: 20px 28px; border-radius: 8px 8px 0 0;">
+            <h1 style="margin: 0; font-size: 22px; font-weight: 700;">NexaDox</h1>
+            <p style="margin: 4px 0 0; font-size: 11px; opacity: 0.85;">Doctor Appointment &amp; Clinic Management</p>
+          </div>
+          <div style="background: #f1f5f9; padding: 12px 28px; border-bottom: 1px solid #e2e8f0;">
+            <p style="margin: 0; font-size: 13px;"><strong>Patient:</strong> ${patientName} &nbsp;&nbsp; <strong>Date:</strong> ${date} &nbsp;&nbsp; <strong>Type:</strong> Manual Prescription</p>
+          </div>
+          <div style="padding: 20px; text-align: center;">
+            <img src="${imageUrl}" style="max-width: 100%; max-height: 800px; border: 1px solid #e2e8f0; border-radius: 8px;" crossorigin="anonymous" />
+          </div>
+          <div style="border-top: 1px solid #e2e8f0; padding: 12px 28px; text-align: center; font-size: 10px; color: #94a3b8;">
+            Manual Prescription — Generated on ${new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })} • NexaDox Platform
+          </div>
+        </div>
+      `;
+      document.body.appendChild(container);
+      const fileName = `Manual_Prescription_${patientName.replace(/\s+/g, "_")}_${date}.pdf`;
+      await html2pdf().set({
+        margin: [0.2, 0.2, 0.2, 0.2],
+        filename: fileName,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: "in", format: "a4", orientation: "portrait" },
+      }).from(container).save();
+      document.body.removeChild(container);
+    } catch (e) { console.error("Manual PDF download failed:", e); }
+    finally { setDownloading(false); }
+  };
+
   const fmtDate = (d: string | null) => {
     if (!d) return "—";
     try { return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }); }
@@ -254,6 +359,48 @@ export default function AttendantPatientsPage() {
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-[400px]"><Loader className="h-8 w-8 animate-spin text-brand-600" /></div>;
+  }
+
+  /* ─── Manual Prescription View (full-page image) ───────────── */
+  if (viewingManualRx) {
+    return (
+      <div className="space-y-4 max-w-4xl mx-auto">
+        <div className="flex items-center justify-between">
+          <Button variant="ghost" onClick={() => setViewingManualRx(null)} className="gap-2">
+            <ArrowLeft className="h-4 w-4" /> Back to Patient Records
+          </Button>
+          <Button
+            onClick={() => downloadManualRxPDF(viewingManualRx.url, viewingManualRx.patientName, viewingManualRx.date)}
+            disabled={downloading}
+            className="gap-2 bg-blue-600 hover:bg-blue-700"
+          >
+            {downloading ? <Loader className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {downloading ? "Generating PDF…" : "Download PDF"}
+          </Button>
+        </div>
+        <div className="bg-white border rounded-xl shadow-lg overflow-hidden">
+          <div style={{ background: "linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)", color: "#fff", padding: "20px 28px" }}>
+            <h1 style={{ fontSize: "22px", fontWeight: 700, margin: 0 }}>NexaDox</h1>
+            <p style={{ fontSize: "11px", margin: "4px 0 0", opacity: 0.85 }}>Manual Prescription</p>
+          </div>
+          <div style={{ background: "#f1f5f9", padding: "12px 28px", borderBottom: "1px solid #e2e8f0" }}>
+            <p style={{ margin: 0, fontSize: "13px" }}>
+              <strong>Patient:</strong> {viewingManualRx.patientName} &nbsp;&nbsp;
+              <strong>Date:</strong> {viewingManualRx.date} &nbsp;&nbsp;
+              <strong>Type:</strong> Manual Prescription
+            </p>
+          </div>
+          <div className="p-6 flex justify-center">
+            <img
+              src={viewingManualRx.url}
+              alt="Manual Prescription"
+              className="max-w-full rounded-lg border shadow-sm"
+              style={{ maxHeight: "800px" }}
+            />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   /* ─── Prescription View (full-page) ────────────────────────── */
@@ -440,8 +587,14 @@ export default function AttendantPatientsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-6">      {/* Hidden file input for manual Rx upload */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={onFileSelected}
+        accept="image/*"
+        className="hidden"
+      />      <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">My Patients</h1>
         <p className="text-muted-foreground mt-1">Patients for your assigned doctors &amp; clinics</p>
       </div>
@@ -628,6 +781,49 @@ export default function AttendantPatientsPage() {
                                 <Download className="h-3 w-3" /> PDF
                               </Button>
                             )}
+                            {/* Manual Rx buttons */}
+                            {rx?.manual_prescription_url && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setViewingManualRx({
+                                    url: rx.manual_prescription_url!,
+                                    patientName: selectedPatient!.name,
+                                    date: new Date(record.appointment_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }),
+                                    aptId: record.id,
+                                  });
+                                  setSelectedPatient(null);
+                                }}
+                                className="gap-1 text-xs h-7 text-purple-700 border-purple-300 hover:bg-purple-50"
+                              >
+                                <Image className="h-3 w-3" /> Manual Rx
+                              </Button>
+                            )}
+                            {!rx && record.status === "completed" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleUploadManualRx(record.id, selectedPatient!.name)}
+                                disabled={uploading === record.id}
+                                className="gap-1 text-xs h-7 text-orange-700 border-orange-300 hover:bg-orange-50"
+                              >
+                                {uploading === record.id ? <Loader className="h-3 w-3 animate-spin" /> : <Camera className="h-3 w-3" />}
+                                Upload Rx
+                              </Button>
+                            )}
+                            {rx && !rx.manual_prescription_url && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleUploadManualRx(record.id, selectedPatient!.name)}
+                                disabled={uploading === record.id}
+                                className="gap-1 text-xs h-7 text-orange-700 border-orange-300 hover:bg-orange-50"
+                              >
+                                {uploading === record.id ? <Loader className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                                Add Manual Rx
+                              </Button>
+                            )}
                           </div>
                         </div>
                         <div className="space-y-2 text-sm">
@@ -651,10 +847,17 @@ export default function AttendantPatientsPage() {
 
                           {rx ? (
                             <div className="mt-2 space-y-2">
-                              <div className="bg-blue-50 dark:bg-blue-900/20 rounded p-2.5">
-                                <span className="font-semibold text-blue-700 text-xs uppercase tracking-wide">Diagnosis:</span>
-                                <span className="ml-2 text-sm">{rx.diagnosis}</span>
-                              </div>
+                              {rx.manual_prescription_url && rx.diagnosis === "Manual Prescription" ? (
+                                <div className="bg-purple-50 dark:bg-purple-900/20 rounded p-2.5 flex items-center gap-2">
+                                  <Image className="h-4 w-4 text-purple-600" />
+                                  <span className="text-xs font-semibold text-purple-700 uppercase tracking-wide">Manual Prescription Uploaded</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded p-2.5">
+                                    <span className="font-semibold text-blue-700 text-xs uppercase tracking-wide">Diagnosis:</span>
+                                    <span className="ml-2 text-sm">{rx.diagnosis}</span>
+                                  </div>
                               {rx.medicines?.filter(m => m.name.trim()).length > 0 && (
                                 <div className="bg-green-50 dark:bg-green-900/20 rounded p-2.5">
                                   <span className="font-semibold text-green-700 text-xs uppercase tracking-wide flex items-center gap-1 mb-1">
@@ -682,6 +885,14 @@ export default function AttendantPatientsPage() {
                                 <div className="flex items-center gap-1 text-xs text-amber-700">
                                   <Calendar className="h-3 w-3" /> Follow-up: {fmtDate(rx.follow_up_date)}
                                 </div>
+                              )}
+                              {rx.manual_prescription_url && rx.diagnosis !== "Manual Prescription" && (
+                                <div className="bg-purple-50 dark:bg-purple-900/20 rounded p-2.5 flex items-center gap-2">
+                                  <Image className="h-3 w-3 text-purple-600" />
+                                  <span className="text-xs font-semibold text-purple-700">Manual Rx also attached</span>
+                                </div>
+                              )}
+                                </>
                               )}
                             </div>
                           ) : (

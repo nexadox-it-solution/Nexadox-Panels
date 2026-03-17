@@ -31,9 +31,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "File must be an image." }, { status: 400 });
     }
 
-    // Max 3MB
-    if (file.size > 3 * 1024 * 1024) {
-      return NextResponse.json({ error: "Image must be under 3 MB." }, { status: 400 });
+    // Max file size: 5MB for prescriptions, 3MB for others
+    const maxSize = bucket === "prescriptions" ? 5 * 1024 * 1024 : 3 * 1024 * 1024;
+    if (file.size > maxSize) {
+      return NextResponse.json({ error: `Image must be under ${bucket === "prescriptions" ? 5 : 3} MB.` }, { status: 400 });
     }
 
     // Generate unique filename
