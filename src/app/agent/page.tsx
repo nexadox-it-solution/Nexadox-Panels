@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import {
   Wallet, Calendar, TrendingUp, Clock,
-  CheckCircle, Users, ArrowUpRight, IndianRupee, Loader,
+  Users, ArrowUpRight, IndianRupee, Loader,
 } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -87,7 +87,7 @@ export default function AgentDashboard() {
   const [stats, setStats] = useState({
     walletBalance: 0, totalBookings: 0, totalEarnings: 0,
     thisMonthBookings: 0, thisMonthEarnings: 0,
-    pendingBookings: 0, completedBookings: 0, commissionRate: 10,
+    pendingBookings: 0, completedBookings: 0, commissionRate: 30,
   });
 
   const [monthlyEarningsK, setMonthlyEarningsK] = useState<{ label: string; value: number }[]>([]);
@@ -103,7 +103,7 @@ export default function AgentDashboard() {
         /* ── Identify agent ────────────────────────────── */
         const { data: { user } } = await supabase.auth.getUser();
         let agentUserId: number | null = null;
-        let walletBalance = 0, walletEarnings = 0, totalBk = 0, commRate = 10;
+        let walletBalance = 0, walletEarnings = 0, totalBk = 0, commRate = 30;
 
         if (user) {
           const ag = await resolveAgent(user.id);
@@ -113,7 +113,7 @@ export default function AgentDashboard() {
             walletEarnings = Number(ag.wallet_earnings) || 0;
             totalBk = Number(ag.total_bookings) || 0;
             const commNum = Number(ag.commission_value);
-            commRate = !isNaN(commNum) && commNum > 0 ? commNum : 10;
+            commRate = !isNaN(commNum) && commNum > 0 ? commNum : 30;
           }
         }
 
@@ -233,9 +233,8 @@ export default function AgentDashboard() {
       </div>
 
       {/* Quick Stats Row */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         {[
-          { label: "Completed Bookings", value: stats.completedBookings, icon: CheckCircle, color: "text-green-600" },
           { label: "Pending Bookings", value: stats.pendingBookings, icon: Clock, color: "text-orange-600" },
           { label: "This Month", value: stats.thisMonthBookings, icon: Calendar, color: "text-blue-600" },
         ].map(s => (

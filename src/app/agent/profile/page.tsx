@@ -89,7 +89,7 @@ export default function AgentProfilePage() {
           businessAddress: agent?.business_address || "",
           panNumber: agent?.pan_number || "",
           gstNumber: agent?.gst_number || "",
-          approvalStatus: (agent?.approval_status || "pending") as "approved" | "pending" | "rejected",
+          approvalStatus: ((agent?.approval_status || "pending").toLowerCase()) as "approved" | "pending" | "rejected",
           commissionType: (agent?.commission_type || "percentage") as "percentage" | "fixed",
           commissionValue: Number(agent?.commission_value) || 0,
           rejectionReason: agent?.rejection_reason || "",
@@ -272,11 +272,9 @@ export default function AgentProfilePage() {
             Manage your business information and approval status
           </p>
         </div>
-        {formData.approvalStatus === "approved" && !isEditing && (
-          <Button onClick={() => setIsEditing(true)} variant="outline">
-            Edit Profile
-          </Button>
-        )}
+        <Button variant="outline" disabled className="gap-2 opacity-60 cursor-not-allowed">
+          Profile Locked
+        </Button>
       </div>
 
       {/* Approval Status Card */}

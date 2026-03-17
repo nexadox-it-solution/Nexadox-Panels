@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
       agent: {
         id: agent.id,
         wallet_balance: Number(agent.wallet_balance) || 0,
-        commission_value: Number(agent.commission_value) || 10,
+        commission_value: Number(agent.commission_value) || 30,
         commission_type: agent.commission_type || "percentage",
         wallet_earnings: Number(agent.wallet_earnings) || 0,
         total_bookings: Number(agent.total_bookings) || 0,

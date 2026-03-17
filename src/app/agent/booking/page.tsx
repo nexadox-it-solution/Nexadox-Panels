@@ -49,7 +49,7 @@ export default function AgentBookingPage() {
   const router = useRouter();
   const [agentUserId, setAgentUserId] = useState<number | null>(null);
   const [agentId, setAgentId] = useState<number | null>(null);
-  const [agentCommissionRate, setAgentCommissionRate] = useState(10);
+  const [agentCommissionRate, setAgentCommissionRate] = useState(30);
   const [walletBalance, setWalletBalance] = useState<number>(0);
 
   /* Form state */
@@ -127,7 +127,7 @@ export default function AgentBookingPage() {
           if (ag) {
             setAgentUserId(ag.user_id || ag.id);
             setAgentId(ag.id);
-            setAgentCommissionRate(ag.commission_value || 10);
+            setAgentCommissionRate(ag.commission_value || 30);
             setWalletBalance(Number(ag.wallet_balance) || 0);
           }
         }

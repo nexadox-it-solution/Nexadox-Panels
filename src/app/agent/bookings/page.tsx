@@ -19,7 +19,7 @@ interface Appointment {
   status: string; source_role: string | null; booking_amount: number | null;
   commission_amount: number | null; payable_amount: number | null;
   voucher_id: number | null; invoice_id: number | null; notes: string | null; created_at: string;
-  patient_id: number | null;
+  patient_id: number | null; token_number: number | null;
 }
 interface VoucherView {
   id: number; voucher_number: string; patient_name: string; doctor_name: string;
@@ -176,7 +176,7 @@ export default function BookingsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-gray-50">
-                    {["Booking ID", "Patient", "Doctor", "Date", "Slot", "Fee", "Commission", "Status", ""].map(h => (
+                    {["Booking ID", "Patient", "Doctor", "Date", "Slot", "Token", "Fee", "Commission", ""].map(h => (
                       <th key={h} className="py-3 px-3 text-xs font-semibold text-muted-foreground uppercase text-left">{h}</th>
                     ))}
                   </tr>
@@ -192,11 +192,9 @@ export default function BookingsPage() {
                       <td className="py-3 px-3 text-xs">{doctors.get(b.doctor_id!) || "—"}</td>
                       <td className="py-3 px-3 text-xs whitespace-nowrap">{b.appointment_date ? fmtDate(b.appointment_date) : "—"}</td>
                       <td className="py-3 px-3 text-xs font-mono">{b.slot || "—"}</td>
+                      <td className="py-3 px-3 text-xs font-mono font-semibold text-orange-600">{b.token_number || "—"}</td>
                       <td className="py-3 px-3 text-xs font-semibold">{fmtMoney(b.booking_amount)}</td>
                       <td className="py-3 px-3 text-xs font-semibold text-green-600">{fmtMoney(b.commission_amount)}</td>
-                      <td className="py-3 px-3">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColor[b.status] || "bg-gray-100"}`}>{b.status}</span>
-                      </td>
                       <td className="py-3 px-3 flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedBooking(b)}><Eye className="h-3.5 w-3.5" /></Button>
                         {b.voucher_id && <Button variant="ghost" size="icon" className="h-7 w-7 text-purple-600" onClick={() => openVoucher(b)}><FileText className="h-3.5 w-3.5" /></Button>}

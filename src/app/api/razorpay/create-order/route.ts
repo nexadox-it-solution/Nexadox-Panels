@@ -39,9 +39,10 @@ export async function POST(req: NextRequest) {
       key_id: keyId,
     });
   } catch (err: any) {
-    console.error("Razorpay create order error:", err);
+    console.error("Razorpay create order error:", err?.error || err);
+    const detail = err?.error?.description || err?.message || "Failed to create order";
     return NextResponse.json(
-      { error: err?.message || "Failed to create order" },
+      { error: detail },
       { status: 500 }
     );
   }
