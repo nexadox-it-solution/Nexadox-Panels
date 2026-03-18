@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     /* ── 2. Get agent record ─────────────────────────────── */
     let agent: any = null;
 
-    const AGENT_COLS = "id, wallet_balance, commission_value, commission_type, wallet_earnings, total_bookings, approval_status, business_name, business_address, pan_number, gst_number, rejection_reason";
+    const AGENT_COLS = "id, wallet_balance, commission_value, commission_type, wallet_earnings, total_bookings, approval_status, business_name, business_address, pan_number, gst_number, user_id";
 
     const { data: byProfile } = await getSupabaseAdmin()
       .from("agents")
@@ -72,11 +72,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Agent record not found" }, { status: 404 });
     }
 
-    /* ── 3. Get transactions ─────────────────────────────── */
+    /* ── 3. Get transactions (match by profile UUID OR numeric user_id) ── */
+    const possibleIds = [String(authUserId)];
+    if (agent.user_id) possibleIds.push(String(agent.user_id));
     const { data: txns } = await getSupabaseAdmin()
       .from("agent_transactions")
       .select("*")
-      .eq("user_id", String(authUserId))
+      .in("user_id", possibleIds)
       .order("created_at", { ascending: false })
       .limit(100);
 
@@ -99,7 +101,6 @@ export async function GET(req: NextRequest) {
         business_address: agent.business_address || "",
         pan_number: agent.pan_number || "",
         gst_number: agent.gst_number || "",
-        rejection_reason: agent.rejection_reason || "",
       },
       transactions: txns || [],
     });
