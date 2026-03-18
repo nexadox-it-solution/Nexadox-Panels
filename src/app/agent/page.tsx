@@ -292,7 +292,7 @@ export default function AgentDashboard() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-gray-50">
-                  {["Patient", "Doctor", "Date & Slot", "Amount", "Commission", "Status"].map(h => (
+                  {["Patient", "Doctor", "Date & Slot", "Amount", "Commission"].map(h => (
                     <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-muted-foreground uppercase">{h}</th>
                   ))}
                 </tr>
@@ -310,11 +310,6 @@ export default function AgentDashboard() {
                     </td>
                     <td className="py-3 px-4 font-medium">{inr(Number(b.booking_amount) || 0)}</td>
                     <td className="py-3 px-4 font-medium text-green-600">{inr(Number(b.commission_amount) || 0)}</td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${statusBadgeClass[b.status] || ""}`}>
-                        {b.status?.charAt(0).toUpperCase() + b.status?.slice(1)}
-                      </span>
-                    </td>
                   </tr>
                 ))}
               </tbody>

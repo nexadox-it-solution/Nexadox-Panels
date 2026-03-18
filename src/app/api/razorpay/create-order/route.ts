@@ -1,7 +1,11 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
-import Razorpay from "razorpay";
 
+/**
+ * POST /api/razorpay/create-order
+ * Creates a Razorpay order using the REST API directly (no npm package).
+ * This avoids any module compatibility issues on Vercel.
+ */
 export async function POST(req: NextRequest) {
   try {
     const { amount, agent_user_id } = await req.json();
@@ -17,20 +21,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Razorpay keys not configured." }, { status: 500 });
     }
 
-    const razorpay = new Razorpay({
-      key_id: keyId,
-      key_secret: keySecret,
+    /* Call Razorpay REST API directly — no npm package needed */
+    const authHeader = "Basic " + Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+
+    const rzpRes = await fetch("https://api.razorpay.com/v1/orders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": authHeader,
+      },
+      body: JSON.stringify({
+        amount: Math.round(amount * 100), // Razorpay expects paise
+        currency: "INR",
+        receipt: `wt_${Date.now()}`.slice(0, 40),
+        notes: {
+          agent_user_id: String(agent_user_id || ""),
+          purpose: "wallet_topup",
+        },
+      }),
     });
 
-    const order = await razorpay.orders.create({
-      amount: Math.round(amount * 100), // Razorpay expects paise
-      currency: "INR",
-      receipt: `wt_${Date.now()}`.slice(0, 40),
-      notes: {
-        agent_user_id: String(agent_user_id || ""),
-        purpose: "wallet_topup",
-      },
-    });
+    const order = await rzpRes.json();
+
+    if (!rzpRes.ok) {
+      console.error("Razorpay API error:", rzpRes.status, order);
+      const detail = order?.error?.description || order?.message || "Failed to create order";
+      return NextResponse.json({ error: detail }, { status: rzpRes.status });
+    }
 
     return NextResponse.json({
       order_id: order.id,
@@ -39,10 +56,9 @@ export async function POST(req: NextRequest) {
       key_id: keyId,
     });
   } catch (err: any) {
-    console.error("Razorpay create order error:", err?.error || err);
-    const detail = err?.error?.description || err?.message || "Failed to create order";
+    console.error("Razorpay create order error:", err);
     return NextResponse.json(
-      { error: detail },
+      { error: err?.message || "Failed to create order" },
       { status: 500 }
     );
   }

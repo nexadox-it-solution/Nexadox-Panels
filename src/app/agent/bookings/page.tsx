@@ -184,7 +184,7 @@ export default function BookingsPage() {
                 <tbody>
                   {paginated.map(b => (
                     <tr key={b.id} className="border-b hover:bg-gray-50">
-                      <td className="py-3 px-3 font-mono text-xs text-orange-600 font-semibold">{b.appointment_id}</td>
+                      <td className="py-3 px-3 font-mono text-xs text-orange-600 font-semibold">NXD{String(b.id).padStart(8, '0')}</td>
                       <td className="py-3 px-3">
                         <p className="font-medium">{b.patient_name}</p>
                         {b.patient_phone && <p className="text-xs text-muted-foreground">{b.patient_phone}</p>}
@@ -231,7 +231,7 @@ export default function BookingsPage() {
             <CardContent className="space-y-4">
               <div className="bg-orange-500 text-white rounded-xl p-4 text-center">
                 <p className="text-sm opacity-90">Booking ID</p>
-                <p className="text-2xl font-bold mt-1 font-mono">{selectedBooking.appointment_id}</p>
+                <p className="text-2xl font-bold mt-1 font-mono">NXD{String(selectedBooking.id).padStart(8, '0')}</p>
                 <span className={`mt-2 inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusColor[selectedBooking.status] || "bg-gray-100"}`}>{selectedBooking.status}</span>
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">

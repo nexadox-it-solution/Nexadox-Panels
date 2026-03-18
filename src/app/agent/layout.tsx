@@ -49,7 +49,7 @@ export default function AgentLayout({ children }: AgentLayoutProps) {
     email: "agent@example.com",
     walletBalance: 0,
     approvalStatus: "approved" as "approved" | "pending" | "rejected",
-    commissionRate: 10,
+    commissionRate: 30,
   });
 
   useEffect(() => {
@@ -67,7 +67,7 @@ export default function AgentLayout({ children }: AgentLayoutProps) {
           email: data.profile?.email || "",
           walletBalance: data.agent?.wallet_balance || 0,
           approvalStatus: "approved",
-          commissionRate: data.agent?.commission_value || 10,
+          commissionRate: Number(data.agent?.commission_value) || 30,
         });
       } catch (e) { /* use defaults */ }
     })();
