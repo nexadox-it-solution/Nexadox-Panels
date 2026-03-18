@@ -4,14 +4,19 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { MapPin, Search, X, Loader } from "lucide-react";
 
 /* ─── Google Maps API Key ─────────────────────────────────────
-   Replace this with your real key. The current one is a placeholder.
+   Set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in your .env.local file.
    ──────────────────────────────────────────────────────────── */
-const GOOGLE_MAPS_API_KEY = "AIzaSyDUMMY_REPLACE_WITH_REAL_KEY";
+const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 
 /* ─── Types ──────────────────────────────────────────────────── */
+interface LocationCoords {
+  lat: number;
+  lng: number;
+}
+
 interface LocationMapPickerProps {
   value: string;                       // Current selected city/locality
-  onSelect: (city: string) => void;    // Called with city name
+  onSelect: (city: string, coords?: LocationCoords) => void;    // Called with city name and optional coordinates
   onClear: () => void;
   placeholder?: string;
   className?: string;
@@ -135,6 +140,8 @@ export default function LocationMapPicker({
         const place = autocomplete.getPlace();
         if (!place.geometry?.location) return;
 
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
         map.setCenter(place.geometry.location);
         map.setZoom(13);
         marker.setPosition(place.geometry.location);
@@ -142,7 +149,7 @@ export default function LocationMapPicker({
 
         const city = extractCity(place);
         if (city) {
-          onSelect(city);
+          onSelect(city, { lat, lng });
           setSearchText(city);
         }
       });
@@ -154,13 +161,16 @@ export default function LocationMapPicker({
       marker.setPosition(latLng);
       marker.setVisible(true);
 
+      const lat = latLng.lat();
+      const lng = latLng.lng();
+
       // Reverse geocode to get city
       const geocoder = new google.maps.Geocoder();
       geocoder.geocode({ location: latLng }, (results: any, status: any) => {
         if (status === "OK" && results?.[0]) {
           const city = extractCity(results[0]);
           if (city) {
-            onSelect(city);
+            onSelect(city, { lat, lng });
             setSearchText(city);
           }
         }

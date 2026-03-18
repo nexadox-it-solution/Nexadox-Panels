@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Building2, Plus, ArrowLeft, Search, X, Upload, Loader } from "lucide-react";
+import { Building2, Plus, ArrowLeft, Search, X, Upload, Loader, MapPin } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+
+const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 
 interface Clinic {
   id: number;
@@ -46,6 +48,9 @@ export default function ClinicsPage() {
   const [editingClinic, setEditingClinic] = useState<Clinic | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mapPreviewRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const markerRef = useRef<any>(null);
   const [formData, setFormData] = useState({
     name: "",
     title: "Mr.",
@@ -66,6 +71,86 @@ export default function ClinicsPage() {
     logo: null as any,
   });
   const [logoPreview, setLogoPreview] = useState<string>("");
+  const [reverseGeocoding, setReverseGeocoding] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
+
+  /* ── Load Google Maps script ─────────────────────────────── */
+  useEffect(() => {
+    if (!GOOGLE_MAPS_API_KEY || (window as any).google?.maps) {
+      if ((window as any).google?.maps) setMapReady(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => setMapReady(true);
+    document.head.appendChild(script);
+  }, []);
+
+  /* ── Init / update map preview when modal opens or lat/lng changes ── */
+  useEffect(() => {
+    if (!isModalOpen || !mapReady || !mapPreviewRef.current) return;
+    const google = (window as any).google;
+    if (!google?.maps) return;
+
+    const lat = parseFloat(formData.latitude);
+    const lng = parseFloat(formData.longitude);
+    const hasCoords = !isNaN(lat) && !isNaN(lng);
+    const center = hasCoords ? { lat, lng } : { lat: 22.5726, lng: 88.3639 };
+
+    if (!mapInstanceRef.current) {
+      mapInstanceRef.current = new google.maps.Map(mapPreviewRef.current, {
+        center,
+        zoom: hasCoords ? 15 : 5,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+      });
+      markerRef.current = new google.maps.Marker({
+        map: mapInstanceRef.current,
+        visible: hasCoords,
+        position: center,
+      });
+    } else {
+      mapInstanceRef.current.setCenter(center);
+      mapInstanceRef.current.setZoom(hasCoords ? 15 : 5);
+      markerRef.current?.setPosition(center);
+      markerRef.current?.setVisible(hasCoords);
+    }
+  }, [isModalOpen, mapReady, formData.latitude, formData.longitude]);
+
+  /* ── Reverse geocode lat/lng → auto-fill address ─────────── */
+  const reverseGeocode = useCallback(async (lat: string, lng: string) => {
+    const latNum = parseFloat(lat);
+    const lngNum = parseFloat(lng);
+    if (isNaN(latNum) || isNaN(lngNum)) return;
+
+    const google = (window as any).google;
+    if (!google?.maps) return;
+
+    setReverseGeocoding(true);
+    try {
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ location: { lat: latNum, lng: lngNum } }, (results: any, status: any) => {
+        if (status === "OK" && results?.[0]) {
+          const comps = results[0].address_components || [];
+          const get = (type: string) => comps.find((c: any) => c.types.includes(type))?.long_name || "";
+          setFormData(prev => ({
+            ...prev,
+            area: get("sublocality_level_1") || get("sublocality") || get("neighborhood") || prev.area,
+            city: get("locality") || get("administrative_area_level_2") || prev.city,
+            state: get("administrative_area_level_1") || prev.state,
+            country: get("country") || prev.country,
+            pincode: get("postal_code") || prev.pincode,
+          }));
+        }
+        setReverseGeocoding(false);
+      });
+    } catch {
+      setReverseGeocoding(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchClinics();
@@ -120,24 +205,25 @@ export default function ClinicsPage() {
   const openEditModal = (clinic: any) => {
     setEditingClinic(clinic);
     setFormData({
-      name: clinic.name,
-      title: "Mr.",
-      contactPerson: "",
-      email: "",
-      callingCode: "91",
-      mobile: "",
-      latitude: "",
-      longitude: "",
-      building: "",
-      area: clinic.location,
-      street: "",
-      landmark: "",
-      city: "",
-      state: "",
-      country: "India",
-      pincode: "",
+      name: clinic.name || "",
+      title: clinic.title || "Mr.",
+      contactPerson: clinic.contact_person || "",
+      email: clinic.email || "",
+      callingCode: clinic.calling_code || "91",
+      mobile: clinic.mobile || "",
+      latitude: clinic.latitude ? String(clinic.latitude) : "",
+      longitude: clinic.longitude ? String(clinic.longitude) : "",
+      building: clinic.building || "",
+      area: clinic.area || "",
+      street: clinic.street || "",
+      landmark: clinic.landmark || "",
+      city: clinic.city || "",
+      state: clinic.state || "",
+      country: clinic.country || "India",
+      pincode: clinic.pincode || "",
       logo: null,
     });
+    setLogoPreview(clinic.logo || "");
     setIsModalOpen(true);
   };
 
@@ -164,6 +250,8 @@ export default function ClinicsPage() {
       logo: null,
     });
     setLogoPreview("");
+    mapInstanceRef.current = null;
+    markerRef.current = null;
   };
 
   const handleInputChange = (field: string, value: string) => {
@@ -428,7 +516,7 @@ export default function ClinicsPage() {
               {/* Co-ordinates */}
               <div className="space-y-4">
                 <h3 className="font-bold text-sm text-gray-600 dark:text-gray-400">Co-ordinates:</h3>
-                <p className="text-xs text-muted-foreground">Pick coordinates from Google Map and paste it here.</p>
+                <p className="text-xs text-muted-foreground">Enter latitude &amp; longitude, then click &quot;Fetch Location&quot; to auto-fill address from Google Maps.</p>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -452,6 +540,24 @@ export default function ClinicsPage() {
                     />
                   </div>
                 </div>
+
+                {/* Fetch Location button */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  disabled={!formData.latitude || !formData.longitude || reverseGeocoding}
+                  onClick={() => reverseGeocode(formData.latitude, formData.longitude)}
+                >
+                  {reverseGeocoding ? <Loader className="h-4 w-4 animate-spin" /> : <MapPin className="h-4 w-4" />}
+                  {reverseGeocoding ? "Fetching..." : "Fetch Location from Coordinates"}
+                </Button>
+
+                {/* Map preview */}
+                {GOOGLE_MAPS_API_KEY && formData.latitude && formData.longitude && (
+                  <div className="rounded-lg overflow-hidden border border-gray-200 h-40" ref={mapPreviewRef} />
+                )}
               </div>
 
               {/* Address */}
@@ -538,10 +644,23 @@ export default function ClinicsPage() {
               <div className="space-y-4">
                 <h3 className="font-bold text-sm text-gray-600 dark:text-gray-400">Logo:</h3>
                 
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition">
-                  <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm font-medium">Click to upload Logo</p>
+                <div 
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {logoPreview ? (
+                    <div className="space-y-2">
+                      <img src={logoPreview} alt="Logo preview" className="h-20 w-20 mx-auto object-contain rounded" />
+                      <p className="text-xs text-muted-foreground">Click to change</p>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                      <p className="text-sm font-medium">Click to upload Logo</p>
+                    </>
+                  )}
                   <input
+                    ref={fileInputRef}
                     type="file"
                     accept="image/*"
                     className="hidden"

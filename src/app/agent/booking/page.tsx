@@ -20,7 +20,7 @@ import { resolveAgent } from "@/lib/resolveRole";
 import LocationMapPicker from "@/components/ui/location-map-picker";
 
 /* ─── Types ─────────────────────────────────────────────────── */
-interface Clinic { id: number; name: string; city: string | null; }
+interface Clinic { id: number; name: string; city: string | null; latitude: number | null; longitude: number | null; }
 interface Specialty { id: number; name: string; }
 interface DoctorRow { id: number; name: string; email: string; clinic_ids: number[] | null; specialty_ids: number[] | null; appointment_fee: number | null; booking_fee: number | null; }
 interface PatientRow { id: number; name: string; email: string; phone: string | null; }
@@ -63,6 +63,7 @@ export default function AgentBookingPage() {
 
   const [frmSpecialtyId, setFrmSpecialtyId] = useState<number | null>(null);
   const [frmLocation, setFrmLocation] = useState("");
+  const [frmLocationCoords, setFrmLocationCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [frmClinicId, setFrmClinicId] = useState<number | null>(null);
   const [frmDoctorId, setFrmDoctorId] = useState<number | null>(null);
   const [frmDate, setFrmDate] = useState("");
@@ -86,9 +87,30 @@ export default function AgentBookingPage() {
   /* Map helpers */
   const clinicMap = new Map(clinics.map(c => [c.id, c.name]));
 
-  /* Location-based filtering */
+  /* Haversine distance (km) */
+  const RADIUS_KM = 50;
+  const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  /* Location-based filtering (proximity + city fallback) */
   const availableLocations = Array.from(new Set(clinics.map(c => c.city).filter(Boolean) as string[])).sort();
-  const locationFilteredClinics = frmLocation ? clinics.filter(c => c.city === frmLocation) : clinics;
+  const locationFilteredClinics = (() => {
+    if (!frmLocation) return clinics;
+    if (frmLocationCoords) {
+      return clinics.filter(c => {
+        if (c.latitude != null && c.longitude != null) {
+          return haversineKm(frmLocationCoords.lat, frmLocationCoords.lng, c.latitude, c.longitude) <= RADIUS_KM;
+        }
+        return c.city === frmLocation;
+      });
+    }
+    return clinics.filter(c => c.city === frmLocation);
+  })();
   const locationClinicIds = new Set(locationFilteredClinics.map(c => c.id));
 
   const filteredDoctors = doctors.filter(d => {
@@ -101,7 +123,7 @@ export default function AgentBookingPage() {
     ? clinics.filter(c => {
         const doc = doctors.find(d => d.id === frmDoctorId);
         if (!(doc?.clinic_ids?.includes(c.id))) return false;
-        if (frmLocation && c.city !== frmLocation) return false;
+        if (frmLocation && !locationClinicIds.has(c.id)) return false;
         return true;
       })
     : [];
@@ -132,7 +154,7 @@ export default function AgentBookingPage() {
           }
         }
         const [clinicRes, docRes, specRes] = await Promise.all([
-          supabase.from("clinics").select("id, name, city").eq("status", "active").order("name"),
+          supabase.from("clinics").select("id, name, city, latitude, longitude").eq("status", "active").order("name"),
           supabase.from("doctors").select("id, name, email, clinic_ids, specialty_ids, appointment_fee, booking_fee").order("name"),
           supabase.from("specialties").select("id, name").order("name"),
         ]);
@@ -306,6 +328,7 @@ export default function AgentBookingPage() {
       setFrmDoctorId(null);
       setFrmSpecialtyId(null);
       setFrmLocation("");
+      setFrmLocationCoords(null);
       setFrmDate("");
       setFrmSlot("");
       setFrmNotes("");
@@ -457,8 +480,8 @@ export default function AgentBookingPage() {
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1"><MapPin className="h-3.5 w-3.5" /> Location</Label>
             <LocationMapPicker
               value={frmLocation}
-              onSelect={(city) => { setFrmLocation(city); setFrmSpecialtyId(null); setFrmDoctorId(null); setFrmClinicId(null); setFrmDate(""); setFrmSlot(""); }}
-              onClear={() => { setFrmLocation(""); setFrmSpecialtyId(null); setFrmDoctorId(null); setFrmClinicId(null); setFrmDate(""); setFrmSlot(""); }}
+              onSelect={(city, coords) => { setFrmLocation(city); setFrmLocationCoords(coords || null); setFrmSpecialtyId(null); setFrmDoctorId(null); setFrmClinicId(null); setFrmDate(""); setFrmSlot(""); }}
+              onClear={() => { setFrmLocation(""); setFrmLocationCoords(null); setFrmSpecialtyId(null); setFrmDoctorId(null); setFrmClinicId(null); setFrmDate(""); setFrmSlot(""); }}
             />
           </div>
 
