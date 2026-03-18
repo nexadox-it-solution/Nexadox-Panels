@@ -48,53 +48,38 @@ export default function AgentProfilePage() {
     businessProof: null as File | null,
   });
 
-  /* ── Fetch real agent data from Supabase on mount ───────── */
+  /* ── Fetch agent data from server-side API (uses service role key) ── */
   useEffect(() => {
     (async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        /* Get userId from localStorage (reliable even when cookies expire) */
+        const session = localStorage.getItem("nexadox-session") || "";
+        const userId = session.split(":")[0];
 
-        // Get profile (SSoT for identity)
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("id, name, email, phone")
-          .eq("id", user.id)
-          .single();
-        if (!profile) return;
-
-        // Get agent row — try profile_id first, then user_id
-        let agent: any = null;
-        const { data: agByProfile } = await supabase
-          .from("agents")
-          .select("id, business_name, business_address, pan_number, gst_number, approval_status, commission_type, commission_value, rejection_reason")
-          .eq("profile_id", user.id)
-          .single();
-        if (agByProfile) {
-          agent = agByProfile;
-        } else {
-          const { data: agByUser } = await supabase
-            .from("agents")
-            .select("id, business_name, business_address, pan_number, gst_number, approval_status, commission_type, commission_value, rejection_reason")
-            .eq("user_id", user.id)
-            .single();
-          agent = agByUser;
+        const url = userId ? `/api/agent/wallet?userId=${userId}` : `/api/agent/wallet`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          console.error("Agent profile API error:", res.status);
+          return;
         }
+
+        const data = await res.json();
+        const { profile, agent } = data;
 
         setFormData({
           name: profile.name || "",
           email: profile.email || "",
           mobile: profile.phone || "",
-          businessName: agent?.business_name || "",
-          businessAddress: agent?.business_address || "",
-          panNumber: agent?.pan_number || "",
-          gstNumber: agent?.gst_number || "",
-          approvalStatus: ((agent?.approval_status || "pending").toLowerCase()) as "approved" | "pending" | "rejected",
-          commissionType: (agent?.commission_type || "percentage") as "percentage" | "fixed",
-          commissionValue: Number(agent?.commission_value) || 0,
-          rejectionReason: agent?.rejection_reason || "",
+          businessName: agent.business_name || "",
+          businessAddress: agent.business_address || "",
+          panNumber: agent.pan_number || "",
+          gstNumber: agent.gst_number || "",
+          approvalStatus: (agent.approval_status || "pending") as "approved" | "pending" | "rejected",
+          commissionType: (agent.commission_type || "percentage") as "percentage" | "fixed",
+          commissionValue: Number(agent.commission_value) || 0,
+          rejectionReason: agent.rejection_reason || "",
         });
-        if (agent) setAgentId(agent.id);
+        if (agent.id) setAgentId(agent.id);
       } catch (e) {
         console.error("Error fetching agent profile:", e);
       } finally {

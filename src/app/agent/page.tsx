@@ -106,14 +106,25 @@ export default function AgentDashboard() {
         let walletBalance = 0, walletEarnings = 0, totalBk = 0, commRate = 30;
 
         if (user) {
+          /* Fetch from server-side API (uses service role key — reliable) */
+          const session = localStorage.getItem("nexadox-session") || "";
+          const uid = session.split(":")[0] || user.id;
+          try {
+            const res = await fetch(`/api/agent/wallet?userId=${uid}`);
+            if (res.ok) {
+              const data = await res.json();
+              walletBalance = Number(data.agent?.wallet_balance) || 0;
+              walletEarnings = Number(data.agent?.wallet_earnings) || 0;
+              totalBk = Number(data.agent?.total_bookings) || 0;
+              const commNum = Number(data.agent?.commission_value);
+              commRate = !isNaN(commNum) && commNum > 0 ? commNum : 30;
+            }
+          } catch {}
+
+          /* Still need agentUserId for appointments query */
           const ag = await resolveAgent(user.id);
           if (ag) {
             agentUserId = ag.user_id || ag.id;
-            walletBalance = Number(ag.wallet_balance) || 0;
-            walletEarnings = Number(ag.wallet_earnings) || 0;
-            totalBk = Number(ag.total_bookings) || 0;
-            const commNum = Number(ag.commission_value);
-            commRate = !isNaN(commNum) && commNum > 0 ? commNum : 30;
           }
         }
 

@@ -49,9 +49,11 @@ export async function GET(req: NextRequest) {
     /* ── 2. Get agent record ─────────────────────────────── */
     let agent: any = null;
 
+    const AGENT_COLS = "id, wallet_balance, commission_value, commission_type, wallet_earnings, total_bookings, approval_status, business_name, business_address, pan_number, gst_number, rejection_reason";
+
     const { data: byProfile } = await getSupabaseAdmin()
       .from("agents")
-      .select("id, wallet_balance, commission_value, commission_type, wallet_earnings, total_bookings")
+      .select(AGENT_COLS)
       .eq("profile_id", authUserId)
       .single();
 
@@ -60,7 +62,7 @@ export async function GET(req: NextRequest) {
     } else {
       const { data: byUser } = await getSupabaseAdmin()
         .from("agents")
-        .select("id, wallet_balance, commission_value, commission_type, wallet_earnings, total_bookings")
+        .select(AGENT_COLS)
         .eq("user_id", authUserId)
         .single();
       agent = byUser;
@@ -83,6 +85,7 @@ export async function GET(req: NextRequest) {
         id: profile.id,
         name: profile.name,
         email: profile.email,
+        phone: profile.phone || "",
       },
       agent: {
         id: agent.id,
@@ -91,6 +94,12 @@ export async function GET(req: NextRequest) {
         commission_type: agent.commission_type || "percentage",
         wallet_earnings: Number(agent.wallet_earnings) || 0,
         total_bookings: Number(agent.total_bookings) || 0,
+        approval_status: (agent.approval_status || "pending").toLowerCase(),
+        business_name: agent.business_name || "",
+        business_address: agent.business_address || "",
+        pan_number: agent.pan_number || "",
+        gst_number: agent.gst_number || "",
+        rejection_reason: agent.rejection_reason || "",
       },
       transactions: txns || [],
     });
