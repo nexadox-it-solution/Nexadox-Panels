@@ -287,7 +287,7 @@ export default function AppointmentsPage() {
   }, [frmDoctorId, doctors, clinics, frmLocation, frmClinicId]);
 
   /* ── Haversine distance (km) ─────────────────────────────── */
-  const RADIUS_KM = 50; // clinics within 50 km radius
+  const RADIUS_KM = 15; // clinics within 15 km radius
   const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number) => {
     const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -301,23 +301,31 @@ export default function AppointmentsPage() {
 
   const locationFilteredClinics = (() => {
     if (!frmLocation) return clinics;
-    const loc = frmLocation.toLowerCase();
-    // If we have coordinates from the map, use proximity matching
+    const loc = frmLocation.toLowerCase().trim();
+    if (!loc) return clinics;
+
+    // Helper: safe city match (skip empty cities)
+    const cityMatches = (city: string | null | undefined) => {
+      const c = (city || "").toLowerCase().trim();
+      if (!c) return false; // never match clinics with empty city
+      return c.includes(loc) || loc.includes(c);
+    };
+
+    // Step 1: Try exact city name matching first
+    const cityMatched = clinics.filter(c => cityMatches(c.city));
+    if (cityMatched.length > 0) return cityMatched;
+
+    // Step 2: If no city match but we have coords, use proximity
     if (frmLocationCoords) {
       return clinics.filter(c => {
-        // Primary: proximity match using lat/lng
         if (c.latitude != null && c.longitude != null) {
           return haversineKm(frmLocationCoords.lat, frmLocationCoords.lng, c.latitude, c.longitude) <= RADIUS_KM;
         }
-        // Fallback: case-insensitive city contains match
-        return (c.city || "").toLowerCase().includes(loc) || loc.includes((c.city || "").toLowerCase());
+        return false;
       });
     }
-    // No coordinates — case-insensitive city contains match
-    return clinics.filter(c => {
-      const cityLower = (c.city || "").toLowerCase();
-      return cityLower.includes(loc) || loc.includes(cityLower);
-    });
+
+    return [];
   })();
   const locationClinicIds = new Set(locationFilteredClinics.map(c => c.id));
 

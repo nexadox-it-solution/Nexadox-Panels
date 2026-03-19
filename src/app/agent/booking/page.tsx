@@ -88,7 +88,7 @@ export default function AgentBookingPage() {
   const clinicMap = new Map(clinics.map(c => [c.id, c.name]));
 
   /* Haversine distance (km) */
-  const RADIUS_KM = 50;
+  const RADIUS_KM = 15;
   const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number) => {
     const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -101,19 +101,30 @@ export default function AgentBookingPage() {
   const availableLocations = Array.from(new Set(clinics.map(c => c.city).filter(Boolean) as string[])).sort();
   const locationFilteredClinics = (() => {
     if (!frmLocation) return clinics;
-    const loc = frmLocation.toLowerCase();
+    const loc = frmLocation.toLowerCase().trim();
+    if (!loc) return clinics;
+
+    const cityMatches = (city: string | null | undefined) => {
+      const c = (city || "").toLowerCase().trim();
+      if (!c) return false;
+      return c.includes(loc) || loc.includes(c);
+    };
+
+    // Step 1: Try exact city name matching first
+    const cityMatched = clinics.filter(c => cityMatches(c.city));
+    if (cityMatched.length > 0) return cityMatched;
+
+    // Step 2: If no city match but we have coords, use proximity
     if (frmLocationCoords) {
       return clinics.filter(c => {
         if (c.latitude != null && c.longitude != null) {
           return haversineKm(frmLocationCoords.lat, frmLocationCoords.lng, c.latitude, c.longitude) <= RADIUS_KM;
         }
-        return (c.city || "").toLowerCase().includes(loc) || loc.includes((c.city || "").toLowerCase());
+        return false;
       });
     }
-    return clinics.filter(c => {
-      const cityLower = (c.city || "").toLowerCase();
-      return cityLower.includes(loc) || loc.includes(cityLower);
-    });
+
+    return [];
   })();
   const locationClinicIds = new Set(locationFilteredClinics.map(c => c.id));
 
