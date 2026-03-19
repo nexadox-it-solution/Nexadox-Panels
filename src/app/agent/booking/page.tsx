@@ -88,7 +88,7 @@ export default function AgentBookingPage() {
   const clinicMap = new Map(clinics.map(c => [c.id, c.name]));
 
   /* Haversine distance (km) */
-  const RADIUS_KM = 15;
+  const RADIUS_KM = 5;
   const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number) => {
     const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;

@@ -287,7 +287,7 @@ export default function AppointmentsPage() {
   }, [frmDoctorId, doctors, clinics, frmLocation, frmClinicId]);
 
   /* ── Haversine distance (km) ─────────────────────────────── */
-  const RADIUS_KM = 15; // clinics within 15 km radius
+  const RADIUS_KM = 5; // clinics within 5 km radius
   const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number) => {
     const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
