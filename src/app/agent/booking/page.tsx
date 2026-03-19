@@ -101,15 +101,19 @@ export default function AgentBookingPage() {
   const availableLocations = Array.from(new Set(clinics.map(c => c.city).filter(Boolean) as string[])).sort();
   const locationFilteredClinics = (() => {
     if (!frmLocation) return clinics;
+    const loc = frmLocation.toLowerCase();
     if (frmLocationCoords) {
       return clinics.filter(c => {
         if (c.latitude != null && c.longitude != null) {
           return haversineKm(frmLocationCoords.lat, frmLocationCoords.lng, c.latitude, c.longitude) <= RADIUS_KM;
         }
-        return c.city === frmLocation;
+        return (c.city || "").toLowerCase().includes(loc) || loc.includes((c.city || "").toLowerCase());
       });
     }
-    return clinics.filter(c => c.city === frmLocation);
+    return clinics.filter(c => {
+      const cityLower = (c.city || "").toLowerCase();
+      return cityLower.includes(loc) || loc.includes(cityLower);
+    });
   })();
   const locationClinicIds = new Set(locationFilteredClinics.map(c => c.id));
 

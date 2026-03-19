@@ -58,7 +58,6 @@ function loadGoogleMaps(): Promise<void> {
 /* ─── Extract city from Google Place ─────────────────────────── */
 function extractCity(place: any): string {
   const comps = place.address_components || [];
-  // Priority: locality > administrative_area_level_2 > administrative_area_level_1
   for (const c of comps) {
     if (c.types.includes("locality")) return c.long_name;
   }
@@ -80,12 +79,20 @@ export default function LocationMapPicker({
   className = "",
 }: LocationMapPickerProps) {
   const mapRef = useRef<HTMLDivElement>(null);
+  const previewMapRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const mapInstanceRef = useRef<any>(null);
+  const previewMapInstanceRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
+  const previewMarkerRef = useRef<any>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
   const [searchText, setSearchText] = useState("");
+  const [selectedCoords, setSelectedCoords] = useState<LocationCoords | null>(null);
+
+  /* Stable ref for onSelect to prevent stale closures in listeners */
+  const onSelectRef = useRef(onSelect);
+  useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
 
   /* Load Google Maps */
   useEffect(() => {
@@ -98,15 +105,16 @@ export default function LocationMapPicker({
     });
   }, []);
 
-  /* Init map + autocomplete */
+  /* Init search map + autocomplete (when value is NOT set — search mode) */
   useEffect(() => {
-    if (!ready || !mapRef.current) return;
+    if (!ready || value || !mapRef.current) return;
     const google = (window as any).google;
     if (!google?.maps) return;
 
-    // Default center: India
-    const defaultCenter = { lat: 22.5726, lng: 88.3639 }; // Kolkata
+    // Don't re-init if already created on same div
+    if (mapInstanceRef.current) return;
 
+    const defaultCenter = { lat: 22.5726, lng: 88.3639 }; // Kolkata
     const map = new google.maps.Map(mapRef.current, {
       center: defaultCenter,
       zoom: 10,
@@ -132,7 +140,7 @@ export default function LocationMapPicker({
     if (searchRef.current) {
       const autocomplete = new google.maps.places.Autocomplete(searchRef.current, {
         types: ["(cities)"],
-        componentRestrictions: { country: "in" }, // Restrict to India
+        componentRestrictions: { country: "in" },
       });
       autocomplete.bindTo("bounds", map);
 
@@ -149,7 +157,8 @@ export default function LocationMapPicker({
 
         const city = extractCity(place);
         if (city) {
-          onSelect(city, { lat, lng });
+          setSelectedCoords({ lat, lng });
+          onSelectRef.current(city, { lat, lng });
           setSearchText(city);
         }
       });
@@ -164,19 +173,69 @@ export default function LocationMapPicker({
       const lat = latLng.lat();
       const lng = latLng.lng();
 
-      // Reverse geocode to get city
       const geocoder = new google.maps.Geocoder();
       geocoder.geocode({ location: latLng }, (results: any, status: any) => {
         if (status === "OK" && results?.[0]) {
           const city = extractCity(results[0]);
           if (city) {
-            onSelect(city, { lat, lng });
+            setSelectedCoords({ lat, lng });
+            onSelectRef.current(city, { lat, lng });
             setSearchText(city);
           }
         }
       });
     });
-  }, [ready, onSelect]);
+  }, [ready, value]); // No onSelect dependency — use ref instead
+
+  /* Cleanup search map when switching to selected view */
+  useEffect(() => {
+    if (value) {
+      mapInstanceRef.current = null;
+      markerRef.current = null;
+    }
+  }, [value]);
+
+  /* Init preview map (when value IS set — selected mode) */
+  useEffect(() => {
+    if (!ready || !value || !previewMapRef.current || !selectedCoords) return;
+    const google = (window as any).google;
+    if (!google?.maps) return;
+
+    const center = { lat: selectedCoords.lat, lng: selectedCoords.lng };
+    const map = new google.maps.Map(previewMapRef.current, {
+      center,
+      zoom: 13,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: false,
+      zoomControl: false,
+      gestureHandling: "none",
+      styles: [
+        { featureType: "poi", stylers: [{ visibility: "off" }] },
+        { featureType: "transit", stylers: [{ visibility: "off" }] },
+      ],
+    });
+    previewMapInstanceRef.current = map;
+
+    const marker = new google.maps.Marker({
+      map,
+      position: center,
+      visible: true,
+    });
+    previewMarkerRef.current = marker;
+
+    return () => {
+      previewMapInstanceRef.current = null;
+      previewMarkerRef.current = null;
+    };
+  }, [ready, value, selectedCoords]);
+
+  /* Handle clear */
+  const handleClear = () => {
+    setSelectedCoords(null);
+    setSearchText("");
+    onClear();
+  };
 
   /* If API failed, fall back to simple text search */
   if (error) {
@@ -192,7 +251,7 @@ export default function LocationMapPicker({
             className="w-full pl-9 pr-9 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           {value && (
-            <button onClick={onClear} className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-100">
+            <button onClick={handleClear} className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-100">
               <X className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
           )}
@@ -204,7 +263,7 @@ export default function LocationMapPicker({
     );
   }
 
-  /* Selected location chip */
+  /* Selected location chip + preview map */
   if (value) {
     return (
       <div className={`space-y-2 ${className}`}>
@@ -213,17 +272,19 @@ export default function LocationMapPicker({
             <MapPin className="h-4 w-4 text-brand-600" />
             <p className="font-semibold text-sm">{value}</p>
           </div>
-          <button onClick={() => { onClear(); setSearchText(""); }} className="p-1 rounded hover:bg-brand-100">
+          <button onClick={handleClear} className="p-1 rounded hover:bg-brand-100">
             <X className="h-4 w-4 text-muted-foreground" />
           </button>
         </div>
-        {/* Small map preview */}
-        <div className="rounded-lg overflow-hidden border border-gray-200 h-36" ref={mapRef} />
+        {/* Preview map — centered at selected location */}
+        {selectedCoords && (
+          <div className="rounded-lg overflow-hidden border border-gray-200 h-36" ref={previewMapRef} />
+        )}
       </div>
     );
   }
 
-  /* Map + search */
+  /* Map + search (no value selected) */
   return (
     <div className={`space-y-2 ${className}`}>
       {!ready ? (

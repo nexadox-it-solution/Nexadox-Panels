@@ -301,18 +301,23 @@ export default function AppointmentsPage() {
 
   const locationFilteredClinics = (() => {
     if (!frmLocation) return clinics;
+    const loc = frmLocation.toLowerCase();
     // If we have coordinates from the map, use proximity matching
     if (frmLocationCoords) {
       return clinics.filter(c => {
+        // Primary: proximity match using lat/lng
         if (c.latitude != null && c.longitude != null) {
           return haversineKm(frmLocationCoords.lat, frmLocationCoords.lng, c.latitude, c.longitude) <= RADIUS_KM;
         }
-        // Fallback to city match for clinics without lat/lng
-        return c.city === frmLocation;
+        // Fallback: case-insensitive city contains match
+        return (c.city || "").toLowerCase().includes(loc) || loc.includes((c.city || "").toLowerCase());
       });
     }
-    // No coordinates — exact city match
-    return clinics.filter(c => c.city === frmLocation);
+    // No coordinates — case-insensitive city contains match
+    return clinics.filter(c => {
+      const cityLower = (c.city || "").toLowerCase();
+      return cityLower.includes(loc) || loc.includes(cityLower);
+    });
   })();
   const locationClinicIds = new Set(locationFilteredClinics.map(c => c.id));
 
