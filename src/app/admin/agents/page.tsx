@@ -70,9 +70,15 @@ export default function AgentsPage() {
 
       if (profileErr) throw profileErr;
 
-      // 2. Query all agent detail rows
-      const { data: agentRows } = await supabase.from("agents").select("*");
-      const agentList = agentRows || [];
+      // 2. Query all agent detail rows via API (service role — bypasses RLS)
+      let agentList: any[] = [];
+      try {
+        const res = await fetch("/api/admin/agents");
+        if (res.ok) {
+          const json = await res.json();
+          agentList = json.data || [];
+        }
+      } catch { /* fallback: empty list */ }
 
       // 3. Build lookup: profile_id → agent, user_id → agent
       const agentByProfileId: Record<string, any> = {};
