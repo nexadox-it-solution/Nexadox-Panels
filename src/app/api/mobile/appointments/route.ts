@@ -59,20 +59,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Generate token number (per doctor + date + slot)
+    // Generate token number (per doctor + date + slot) — atomic via DB function
     let tokenNumber = 1;
     try {
-      const { data: maxRows } = await admin
-        .from("appointments")
-        .select("token_number")
-        .eq("doctor_id", doctor_id)
-        .eq("appointment_date", appointment_date)
-        .eq("slot", slot)
-        .not("token_number", "is", null)
-        .neq("status", "cancelled")
-        .order("token_number", { ascending: false })
-        .limit(1);
-      tokenNumber = ((maxRows?.[0]?.token_number as number) || 0) + 1;
+      // Try atomic DB function first (no race condition)
+      const { data: rpcToken, error: rpcErr } = await admin.rpc("get_next_token", {
+        p_doctor_id: doctor_id,
+        p_appointment_date: appointment_date,
+        p_slot: slot,
+      });
+      if (!rpcErr && rpcToken != null) {
+        tokenNumber = rpcToken;
+      } else {
+        // Fallback: query max + 1
+        const { data: maxRows } = await admin
+          .from("appointments")
+          .select("token_number")
+          .eq("doctor_id", doctor_id)
+          .eq("appointment_date", appointment_date)
+          .eq("slot", slot)
+          .not("token_number", "is", null)
+          .neq("status", "cancelled")
+          .order("token_number", { ascending: false })
+          .limit(1);
+        tokenNumber = ((maxRows?.[0]?.token_number as number) || 0) + 1;
+      }
     } catch { /* fallback to 1 */ }
 
     const appointmentId = genId();

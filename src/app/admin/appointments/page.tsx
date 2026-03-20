@@ -17,7 +17,7 @@ import {
   Calendar, Plus, ArrowLeft, Search, Check, X, Clock, Loader,
   AlertCircle, FileText, Receipt, Eye, Stethoscope, Building2,
   User, Phone, IndianRupee, Ban, Download, Printer, MapPin,
-  Trash2, AlertTriangle,
+  Trash2, AlertTriangle, Users, UserPlus,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import LocationMapPicker from "@/components/ui/location-map-picker";
@@ -27,6 +27,7 @@ interface Clinic { id: number; name: string; city: string | null; latitude: numb
 interface Specialty { id: number; name: string; }
 interface DoctorRow { id: number; name: string; email: string; clinic_ids: number[] | null; specialty_ids: number[] | null; appointment_fee: number | null; booking_fee: number | null; }
 interface PatientRow { id: number; name: string; email: string; phone: string | null; }
+interface FamilyMember { id: number; patient_id: number; name: string; age: number; gender: string; relationship: string; date_of_birth?: string; }
 
 interface Appointment {
   id: number;
@@ -145,6 +146,18 @@ export default function AppointmentsPage() {
   const [frmPatientPhone, setFrmPatientPhone]   = useState("");
   const [frmIsNewPatient, setFrmIsNewPatient]   = useState(false);
 
+  /* Family member state */
+  const [frmFamilyMembers, setFrmFamilyMembers]     = useState<FamilyMember[]>([]);
+  const [frmSelectedMember, setFrmSelectedMember]   = useState<FamilyMember | null>(null);
+  const [frmBookingFor, setFrmBookingFor]           = useState<"self" | "family">("self");
+  const [frmLoadingFamily, setFrmLoadingFamily]     = useState(false);
+  const [frmShowAddFamily, setFrmShowAddFamily]     = useState(false);
+  const [frmNewFamilyName, setFrmNewFamilyName]     = useState("");
+  const [frmNewFamilyAge, setFrmNewFamilyAge]       = useState("");
+  const [frmNewFamilyGender, setFrmNewFamilyGender] = useState("Male");
+  const [frmNewFamilyRelation, setFrmNewFamilyRelation] = useState("Spouse");
+  const [frmAddingFamily, setFrmAddingFamily]       = useState(false);
+
   const [frmSpecialtyId, setFrmSpecialtyId] = useState<number | null>(null);
   const [frmLocation, setFrmLocation]     = useState("");
   const [frmLocationCoords, setFrmLocationCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -229,6 +242,45 @@ export default function AppointmentsPage() {
       
       setFrmPatients(Array.from(unique.values()));
     } catch { setFrmPatients([]); }
+  };
+
+  /* ── Fetch family members when patient selected ─────────── */
+  const fetchFamilyMembers = async (patientId: number) => {
+    setFrmLoadingFamily(true);
+    try {
+      const res = await fetch(`/api/admin/family-members?patient_id=${patientId}`);
+      if (res.ok) {
+        const json = await res.json();
+        setFrmFamilyMembers(json.data || []);
+      }
+    } catch { setFrmFamilyMembers([]); }
+    finally { setFrmLoadingFamily(false); }
+  };
+
+  const addFamilyMember = async () => {
+    if (!frmNewFamilyName.trim()) return;
+    const pid = frmPatientId;
+    if (!pid) return;
+    setFrmAddingFamily(true);
+    try {
+      const res = await fetch("/api/admin/family-members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patient_id: pid,
+          name: frmNewFamilyName.trim(),
+          age: parseInt(frmNewFamilyAge) || 0,
+          gender: frmNewFamilyGender,
+          relationship: frmNewFamilyRelation,
+        }),
+      });
+      if (res.ok) {
+        setFrmShowAddFamily(false);
+        setFrmNewFamilyName(""); setFrmNewFamilyAge(""); setFrmNewFamilyGender("Male"); setFrmNewFamilyRelation("Spouse");
+        await fetchFamilyMembers(pid);
+      }
+    } catch {}
+    finally { setFrmAddingFamily(false); }
   };
 
   /* ── When doctor changes: fetch all scheduled dates ─────────── */
@@ -366,6 +418,8 @@ export default function AppointmentsPage() {
     setFrmPatientSearch(""); setFrmPatients([]); setFrmPatientId(null);
     setFrmPatientName(""); setFrmPatientEmail(""); setFrmPatientPhone("");
     setFrmIsNewPatient(false);
+    setFrmFamilyMembers([]); setFrmSelectedMember(null); setFrmBookingFor("self");
+    setFrmShowAddFamily(false); setFrmLoadingFamily(false);
     setFrmSpecialtyId(null); setFrmLocation(""); setFrmLocationCoords(null);
     setFrmClinicId(null); setFrmDoctorId(null); setFrmDate(""); setFrmSlot(""); setFrmNotes("");
     setFrmSourceRole("Admin"); setFormError(""); setClinicSearch(""); setShowClinicDrop(false);
@@ -396,11 +450,15 @@ export default function AppointmentsPage() {
       const doctorName = doctorMap.get(frmDoctorId) || "";
 
       /* Call server API — handles appointment + voucher + invoice + transaction */
+      /* Determine booking patient name (self or family member) */
+      const bookingPatientName = frmBookingFor === "family" && frmSelectedMember
+        ? frmSelectedMember.name : frmPatientName.trim();
+
       const apiRes = await fetch("/api/admin/appointments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          patient_name: frmPatientName.trim(),
+          patient_name: bookingPatientName,
           patient_email: frmPatientEmail || null,
           patient_phone: frmPatientPhone || null,
           doctor_id: frmDoctorId,
@@ -1009,7 +1067,7 @@ export default function AppointmentsPage() {
                   <div className="border rounded-lg divide-y max-h-44 overflow-y-auto bg-white">
                     {frmPatients.map((p, i) => (
                       <button key={i} className="w-full text-left px-3 py-2.5 hover:bg-brand-50 text-sm transition-colors"
-                        onClick={() => { setFrmPatientId(p.id); setFrmPatientName(p.name); setFrmPatientEmail(p.email); setFrmPatientPhone(p.phone || ""); setFrmPatients([]); setFrmPatientSearch(p.phone || ""); }}>
+                        onClick={() => { setFrmPatientId(p.id); setFrmPatientName(p.name); setFrmPatientEmail(p.email); setFrmPatientPhone(p.phone || ""); setFrmPatients([]); setFrmPatientSearch(p.phone || ""); setFrmBookingFor("self"); setFrmSelectedMember(null); if (p.id) fetchFamilyMembers(p.id); }}>
                         <div className="flex items-center justify-between">
                           <span className="font-medium">{p.name}</span>
                           <span className="text-xs font-mono text-brand-600">{p.phone}</span>
@@ -1027,7 +1085,7 @@ export default function AppointmentsPage() {
                       <p className="font-semibold text-sm">{frmPatientName}</p>
                       <p className="text-xs text-muted-foreground">{frmPatientPhone}{frmPatientEmail ? ` • ${frmPatientEmail}` : ""}</p>
                     </div>
-                    <button onClick={() => { setFrmPatientId(null); setFrmPatientName(""); setFrmPatientEmail(""); setFrmPatientPhone(""); setFrmPatientSearch(""); }}
+                    <button onClick={() => { setFrmPatientId(null); setFrmPatientName(""); setFrmPatientEmail(""); setFrmPatientPhone(""); setFrmPatientSearch(""); setFrmFamilyMembers([]); setFrmSelectedMember(null); setFrmBookingFor("self"); }}
                       className="p-1 rounded hover:bg-brand-100"><X className="h-4 w-4 text-muted-foreground" /></button>
                   </div>
                 )}
@@ -1035,6 +1093,82 @@ export default function AppointmentsPage() {
                 <button onClick={() => setFrmIsNewPatient(true)} className="text-xs text-brand-600 font-medium hover:underline">
                   + Create new patient
                 </button>
+
+                {/* Family Member Booking Section */}
+                {frmPatientId && frmPatientId > 0 && (
+                  <div className="mt-3 border-t pt-3 space-y-2">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                      <Users className="h-3.5 w-3.5" /> Book For
+                    </Label>
+                    <div className="flex gap-2">
+                      <button onClick={() => { setFrmBookingFor("self"); setFrmSelectedMember(null); }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${frmBookingFor === "self" ? "bg-brand-600 text-white border-brand-600" : "border-gray-200 hover:bg-gray-50"}`}>
+                        Self ({frmPatientName.split(" ")[0]})
+                      </button>
+                      <button onClick={() => setFrmBookingFor("family")}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${frmBookingFor === "family" ? "bg-brand-600 text-white border-brand-600" : "border-gray-200 hover:bg-gray-50"}`}>
+                        Family Member
+                      </button>
+                    </div>
+
+                    {frmBookingFor === "family" && (
+                      <div className="space-y-2">
+                        {frmLoadingFamily ? (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                            <Loader className="h-3 w-3 animate-spin" /> Loading family members...
+                          </div>
+                        ) : frmFamilyMembers.length > 0 ? (
+                          <div className="space-y-1">
+                            {frmFamilyMembers.map((fm) => (
+                              <button key={fm.id} onClick={() => setFrmSelectedMember(fm)}
+                                className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors ${
+                                  frmSelectedMember?.id === fm.id
+                                    ? "bg-brand-50 border-brand-300 ring-1 ring-brand-200"
+                                    : "border-gray-200 hover:bg-gray-50"
+                                }`}>
+                                <div className="flex items-center justify-between">
+                                  <span className="font-medium">{fm.name}</span>
+                                  <span className="text-xs text-muted-foreground">{fm.relationship} · {fm.gender} · {fm.age} yrs</span>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground py-1">No family members found.</p>
+                        )}
+
+                        {/* Add family member inline form */}
+                        {!frmShowAddFamily ? (
+                          <button onClick={() => setFrmShowAddFamily(true)} className="text-xs text-brand-600 font-medium hover:underline flex items-center gap-1">
+                            <UserPlus className="h-3 w-3" /> Add family member
+                          </button>
+                        ) : (
+                          <div className="border rounded-lg p-3 bg-white space-y-2">
+                            <p className="text-xs font-semibold text-muted-foreground">New Family Member</p>
+                            <Input placeholder="Name *" value={frmNewFamilyName} onChange={(e) => setFrmNewFamilyName(e.target.value)} className="h-8 text-sm" />
+                            <div className="grid grid-cols-3 gap-2">
+                              <Input placeholder="Age" type="number" value={frmNewFamilyAge} onChange={(e) => setFrmNewFamilyAge(e.target.value)} className="h-8 text-sm" />
+                              <select value={frmNewFamilyGender} onChange={(e) => setFrmNewFamilyGender(e.target.value)}
+                                className="h-8 rounded-md border border-input bg-background px-2 text-xs">
+                                <option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option>
+                              </select>
+                              <select value={frmNewFamilyRelation} onChange={(e) => setFrmNewFamilyRelation(e.target.value)}
+                                className="h-8 rounded-md border border-input bg-background px-2 text-xs">
+                                <option value="Spouse">Spouse</option><option value="Child">Child</option><option value="Parent">Parent</option><option value="Sibling">Sibling</option><option value="Other">Other</option>
+                              </select>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button size="sm" className="h-7 text-xs bg-brand-600 hover:bg-brand-700" onClick={addFamilyMember} disabled={frmAddingFamily}>
+                                {frmAddingFamily ? <Loader className="h-3 w-3 animate-spin" /> : "Add"}
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setFrmShowAddFamily(false)}>Cancel</Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             ) : (
               <div className="space-y-3">

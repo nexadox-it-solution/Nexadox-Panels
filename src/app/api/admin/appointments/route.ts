@@ -166,18 +166,29 @@ export async function POST(req: NextRequest) {
     let assignedToken: number | null = token_number || null;
     if (!assignedToken) {
       try {
-        let tokenQuery = getSupabaseAdmin()
-          .from("appointments")
-          .select("token_number")
-          .eq("doctor_id", doctor_id)
-          .eq("appointment_date", appointment_date)
-          .not("token_number", "is", "null")
-          .neq("status", "cancelled");
-        if (slot) tokenQuery = tokenQuery.eq("slot", slot);
-        const { data: maxTokenRows } = await tokenQuery
-          .order("token_number", { ascending: false })
-          .limit(1);
-        assignedToken = ((maxTokenRows?.[0]?.token_number as number) || 0) + 1;
+        // Try atomic DB function first (prevents duplicate tokens)
+        const { data: rpcToken, error: rpcErr } = await getSupabaseAdmin().rpc("get_next_token", {
+          p_doctor_id: doctor_id,
+          p_appointment_date: appointment_date,
+          p_slot: slot || "Morning",
+        });
+        if (!rpcErr && rpcToken != null) {
+          assignedToken = rpcToken;
+        } else {
+          // Fallback: query max + 1
+          let tokenQuery = getSupabaseAdmin()
+            .from("appointments")
+            .select("token_number")
+            .eq("doctor_id", doctor_id)
+            .eq("appointment_date", appointment_date)
+            .not("token_number", "is", "null")
+            .neq("status", "cancelled");
+          if (slot) tokenQuery = tokenQuery.eq("slot", slot);
+          const { data: maxTokenRows } = await tokenQuery
+            .order("token_number", { ascending: false })
+            .limit(1);
+          assignedToken = ((maxTokenRows?.[0]?.token_number as number) || 0) + 1;
+        }
       } catch (e) {
         console.error("Token generation warning:", e);
         assignedToken = 1;
