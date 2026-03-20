@@ -449,30 +449,28 @@ export default function AdminDashboard() {
   /* ─── Fetch Admin KPIs ───────────────────────────────── */
   const fetchAdminKpis = async () => {
     try {
-      // Admin transactions count
-      const adminTxnRes = await supabase
-        .from("admin_transactions")
-        .select("*", { count: "exact", head: true });
-      const adminTransactionCount = adminTxnRes.count || 0;
+      // Admin transactions: appointments booked via Admin panel
+      const adminAptsRes = await supabase
+        .from("appointments")
+        .select("*", { count: "exact", head: true })
+        .eq("source_role", "Admin");
+      const adminTransactionCount = adminAptsRes.count || 0;
 
-      // Admin transaction revenue
-      const adminTxnDataRes = await supabase
-        .from("admin_transactions")
-        .select("amount");
-      const adminRevenue = (adminTxnDataRes.data || []).reduce((s, t) => s + (t.amount || 0), 0);
+      // Admin revenue: total booking_amount from admin-booked appointments
+      const adminRevenueRes = await supabase
+        .from("appointments")
+        .select("booking_amount")
+        .eq("source_role", "Admin");
+      const adminRevenue = (adminRevenueRes.data || []).reduce((s, a) => s + (a.booking_amount || 0), 0);
 
-      // Pending approvals (agents + doctors)
+      // Pending approvals (agents only; doctors table has no approval_status column)
       const pendingAgentsRes = await supabase
         .from("agents")
         .select("*", { count: "exact", head: true })
         .eq("approval_status", "pending");
-      const pendingDoctorsRes = await supabase
-        .from("doctors")
-        .select("*", { count: "exact", head: true })
-        .eq("approval_status", "pending");
-      const totalPending = (pendingAgentsRes.count || 0) + (pendingDoctorsRes.count || 0);
+      const totalPending = pendingAgentsRes.count || 0;
 
-      // Top agent by transaction count
+      // Top agent by transaction count from agent_transactions ledger
       const topAgentRes = await supabase
         .from("agent_transactions")
         .select("user_name, amount")
@@ -497,11 +495,10 @@ export default function AdminDashboard() {
   /* ─── Fetch Attendant KPIs ───────────────────────────────── */
   const fetchAttendantKpis = async () => {
     try {
-      // Total attendants from profiles with role='attendant'
+      // Total attendants from dedicated attendants table
       const attendantsRes = await supabase
-        .from("profiles")
-        .select("*", { count: "exact", head: true })
-        .eq("role", "attendant");
+        .from("attendants")
+        .select("*", { count: "exact", head: true });
       const totalAttendants = attendantsRes.count || 0;
 
       // Appointments from attendant source
@@ -522,14 +519,14 @@ export default function AdminDashboard() {
         else if (a.patient_phone) uniquePatients.add(a.patient_phone);
       });
 
-      // Average rating for attendants (from completed appointments)
+      // Completion rate of attendant appointments (as 0-5 scale)
       const completedAptsRes = await supabase
         .from("appointments")
-        .select("status")
+        .select("*", { count: "exact", head: true })
         .eq("source_role", "Attendant")
         .eq("status", "completed");
-      const completedCount = completedAptsRes.data?.length || 0;
-      const avgRating = completedCount > 0 ? 4.2 + Math.random() * 0.8 : 0;
+      const completedCount = completedAptsRes.count || 0;
+      const avgRating = appointmentsHandled > 0 ? (completedCount / appointmentsHandled) * 5 : 0;
 
       setAttendantKpis({
         totalAttendants,
