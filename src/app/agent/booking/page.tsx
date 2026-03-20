@@ -376,6 +376,13 @@ export default function AgentBookingPage() {
       const bookingPatientName = frmBookingFor === "family" && frmSelectedMember
         ? frmSelectedMember.name : frmPatientName.trim();
 
+      /* Build notes — prepend family member marker if applicable */
+      let finalNotes = frmNotes || "";
+      if (frmBookingFor === "family" && frmSelectedMember) {
+        const fmIndex = frmFamilyMembers.findIndex(fm => fm.id === frmSelectedMember!.id) + 1;
+        finalNotes = `[FM:${fmIndex}]${finalNotes ? " " + finalNotes : ""}`;
+      }
+
       const apiRes = await fetch("/api/admin/appointments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -393,7 +400,7 @@ export default function AgentBookingPage() {
           payable_amount: payableAmount,
           doctor_name: doctorName,
           clinic_name: clinicName,
-          notes: frmNotes || null,
+          notes: finalNotes || null,
           agent_user_id: agentUserId,
           agent_id: agentId,
         }),

@@ -429,6 +429,13 @@ export default function AttendantAppointmentsPage() {
     } catch (err) { console.error(err); }
   };
 
+  /* ── UHID helper — shows sub-format for family members ──── */
+  const getUhid = (patientId: number | null | undefined, notes: string | null | undefined) => {
+    const base = `UHID${String(patientId || 0).padStart(8, '0')}`;
+    const match = notes?.match(/\[FM:(\d+)\]/);
+    return match ? `${base}/${match[1]}` : base;
+  };
+
   /* ── Print/Download voucher (same as admin) ────────────── */
   const printVoucher = () => {
     const printWindow = window.open("", "_blank", "width=600,height=800");
@@ -465,7 +472,7 @@ export default function AttendantAppointmentsPage() {
   </div>
   <div class="slip-title">BOOKING SLIP</div>
   <div class="info-grid">
-    <div class="info-row"><span class="info-label">UHID No.:</span><span class="info-value">UHID${String(aptExtra?.patient_id || 0).padStart(8, '0')}</span></div>
+    <div class="info-row"><span class="info-label">UHID No.:</span><span class="info-value">${getUhid(aptExtra?.patient_id, aptExtra?.notes)}</span></div>
     <div class="info-row"><span class="info-label">Booking ID:</span><span class="info-value">NXD${String(aptExtra?.id || 0).padStart(8, '0')}</span></div>
     <div class="info-row"><span class="info-label">Date:</span><span class="info-value">${v.appointment_date}</span></div>
     <div class="info-row"><span class="info-label">Patient Name:</span><span class="info-value">${v.patient_name}</span></div>
@@ -740,7 +747,7 @@ export default function AttendantAppointmentsPage() {
             </div>
 
             <div className="px-5 grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
-              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">UHID No.:</span><span className="text-gray-600">UHID{String(viewVoucher._apt?.patient_id || 0).padStart(8, '0')}</span></div>
+              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">UHID No.:</span><span className="text-gray-600">{getUhid(viewVoucher._apt?.patient_id, viewVoucher._apt?.notes)}</span></div>
               <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Booking ID:</span><span className="text-gray-600">NXD{String(viewVoucher._apt?.id || 0).padStart(8, '0')}</span></div>
               <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Date:</span><span className="text-gray-600">{fmtDate(viewVoucher.appointment_date)}</span></div>
               <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Patient Name:</span><span className="text-gray-600">{viewVoucher.patient_name}</span></div>

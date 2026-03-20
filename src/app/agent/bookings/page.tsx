@@ -66,7 +66,12 @@ export default function BookingsPage() {
 
   const [selectedBooking, setSelectedBooking] = useState<Appointment | null>(null);
   const [viewVoucher, setViewVoucher]         = useState<VoucherView | null>(null);
-
+  /* ── UHID helper — shows sub-format for family members ──── */
+  const getUhid = (patientId: number | null | undefined, notes: string | null | undefined) => {
+    const base = `UHID${String(patientId || 0).padStart(8, '0')}`;
+    const match = notes?.match(/\[FM:(\d+)\]/);
+    return match ? `${base}/${match[1]}` : base;
+  };
   /* ── Fetch agent's own bookings ─────────────────────────── */
   const fetchBookings = useCallback(async () => {
     setLoading(true);
@@ -273,7 +278,7 @@ export default function BookingsPage() {
 
             {/* Patient & Booking Info */}
             <div className="px-5 grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
-              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">UHID No.:</span><span className="text-gray-600">UHID{String(viewVoucher._apt?.patient_id || 0).padStart(8, '0')}</span></div>
+              <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">UHID No.:</span><span className="text-gray-600">{getUhid(viewVoucher._apt?.patient_id, viewVoucher._apt?.notes)}</span></div>
               <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Booking ID:</span><span className="text-gray-600">NXD{String(viewVoucher._apt?.id || 0).padStart(8, '0')}</span></div>
               <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Date:</span><span className="text-gray-600">{fmtDate(viewVoucher.appointment_date)}</span></div>
               <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[100px]">Patient Name:</span><span className="text-gray-600">{viewVoucher.patient_name}</span></div>
