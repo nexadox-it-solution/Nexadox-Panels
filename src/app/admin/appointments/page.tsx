@@ -203,10 +203,12 @@ export default function AppointmentsPage() {
     ? clinics.filter(c => c.name.toLowerCase().includes(clinicSearch.toLowerCase()) || (c.city || "").toLowerCase().includes(clinicSearch.toLowerCase()))
     : clinics;
 
-  /* ── Patient search — by phone number (search patients + appointments) ──── */
+  /* ── Patient search — by phone number (search patients + appointments + family) ── */
+  const [frmSearchFamilyMap, setFrmSearchFamilyMap] = useState<Record<number, FamilyMember[]>>({});
+
   const searchPatients = async (q: string) => {
     setFrmPatientSearch(q);
-    if (q.length < 3) { setFrmPatients([]); return; }
+    if (q.length < 3) { setFrmPatients([]); setFrmSearchFamilyMap({}); return; }
     try {
       const unique = new Map<string, PatientRow>();
       
@@ -240,8 +242,27 @@ export default function AppointmentsPage() {
         });
       }
       
-      setFrmPatients(Array.from(unique.values()));
-    } catch { setFrmPatients([]); }
+      const patientsList = Array.from(unique.values());
+      setFrmPatients(patientsList);
+
+      /* 3. Fetch family members for patients with valid IDs */
+      const validPatients = patientsList.filter(p => p.id > 0);
+      if (validPatients.length > 0) {
+        const familyMap: Record<number, FamilyMember[]> = {};
+        await Promise.all(validPatients.map(async (p) => {
+          try {
+            const res = await fetch(`/api/admin/family-members?patient_id=${p.id}`);
+            if (res.ok) {
+              const json = await res.json();
+              if (json.data?.length > 0) familyMap[p.id] = json.data;
+            }
+          } catch {}
+        }));
+        setFrmSearchFamilyMap(familyMap);
+      } else {
+        setFrmSearchFamilyMap({});
+      }
+    } catch { setFrmPatients([]); setFrmSearchFamilyMap({}); }
   };
 
   /* ── Fetch family members when patient selected ─────────── */
@@ -1062,31 +1083,62 @@ export default function AppointmentsPage() {
                     onChange={(e) => { searchPatients(e.target.value); }} className="pl-9" />
                 </div>
 
-                {/* Search results */}
+                {/* Search results with family members */}
                 {frmPatients.length > 0 && !frmPatientId && (
-                  <div className="border rounded-lg divide-y max-h-44 overflow-y-auto bg-white">
+                  <div className="border rounded-lg max-h-64 overflow-y-auto bg-white">
                     {frmPatients.map((p, i) => (
-                      <button key={i} className="w-full text-left px-3 py-2.5 hover:bg-brand-50 text-sm transition-colors"
-                        onClick={() => { setFrmPatientId(p.id); setFrmPatientName(p.name); setFrmPatientEmail(p.email); setFrmPatientPhone(p.phone || ""); setFrmPatients([]); setFrmPatientSearch(p.phone || ""); setFrmBookingFor("self"); setFrmSelectedMember(null); if (p.id) fetchFamilyMembers(p.id); }}>
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">{p.name}</span>
-                          <span className="text-xs font-mono text-brand-600">{p.phone}</span>
-                        </div>
-                        {p.email && <p className="text-xs text-muted-foreground mt-0.5">{p.email}</p>}
-                      </button>
+                      <div key={i}>
+                        <button className="w-full text-left px-3 py-2.5 hover:bg-brand-50 text-sm transition-colors border-b"
+                          onClick={() => { setFrmPatientId(p.id); setFrmPatientName(p.name); setFrmPatientEmail(p.email); setFrmPatientPhone(p.phone || ""); setFrmPatients([]); setFrmPatientSearch(p.phone || ""); setFrmBookingFor("self"); setFrmSelectedMember(null); setFrmSearchFamilyMap({}); if (p.id) fetchFamilyMembers(p.id); }}>
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">{p.name}</span>
+                            <span className="text-xs font-mono text-brand-600">{p.phone}</span>
+                          </div>
+                          {p.email && <p className="text-xs text-muted-foreground mt-0.5">{p.email}</p>}
+                        </button>
+                        {/* Family members under this patient */}
+                        {frmSearchFamilyMap[p.id]?.map((fm) => (
+                          <button key={`fm-${fm.id}`}
+                            className="w-full text-left px-3 py-2 hover:bg-emerald-50 text-sm transition-colors border-b bg-gray-50/80 pl-7"
+                            onClick={() => {
+                              setFrmPatientId(p.id); setFrmPatientName(p.name); setFrmPatientEmail(p.email); setFrmPatientPhone(p.phone || "");
+                              setFrmPatients([]); setFrmPatientSearch(p.phone || "");
+                              setFrmBookingFor("family"); setFrmSelectedMember(fm);
+                              setFrmFamilyMembers(frmSearchFamilyMap[p.id] || []);
+                              setFrmSearchFamilyMap({});
+                            }}>
+                            <div className="flex items-center justify-between">
+                              <span className="flex items-center gap-1.5">
+                                <Users className="h-3 w-3 text-emerald-600" />
+                                <span className="font-medium text-emerald-700">{fm.name}</span>
+                              </span>
+                              <span className="text-xs text-muted-foreground">{fm.relationship} · {fm.age} yrs</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
                     ))}
                   </div>
                 )}
 
                 {/* Confirmed patient card */}
                 {frmPatientId !== null && frmPatientName && (
-                  <div className="border border-brand-200 bg-brand-50/50 rounded-lg p-3 flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-sm">{frmPatientName}</p>
-                      <p className="text-xs text-muted-foreground">{frmPatientPhone}{frmPatientEmail ? ` • ${frmPatientEmail}` : ""}</p>
+                  <div className="border border-brand-200 bg-brand-50/50 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-sm">{frmPatientName}</p>
+                        <p className="text-xs text-muted-foreground">{frmPatientPhone}{frmPatientEmail ? ` • ${frmPatientEmail}` : ""}</p>
+                      </div>
+                      <button onClick={() => { setFrmPatientId(null); setFrmPatientName(""); setFrmPatientEmail(""); setFrmPatientPhone(""); setFrmPatientSearch(""); setFrmFamilyMembers([]); setFrmSelectedMember(null); setFrmBookingFor("self"); setFrmSearchFamilyMap({}); }}
+                        className="p-1 rounded hover:bg-brand-100"><X className="h-4 w-4 text-muted-foreground" /></button>
                     </div>
-                    <button onClick={() => { setFrmPatientId(null); setFrmPatientName(""); setFrmPatientEmail(""); setFrmPatientPhone(""); setFrmPatientSearch(""); setFrmFamilyMembers([]); setFrmSelectedMember(null); setFrmBookingFor("self"); }}
-                      className="p-1 rounded hover:bg-brand-100"><X className="h-4 w-4 text-muted-foreground" /></button>
+                    {frmBookingFor === "family" && frmSelectedMember && (
+                      <div className="mt-2 pt-2 border-t border-brand-200">
+                        <p className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
+                          <Users className="h-3 w-3" /> Booking for: {frmSelectedMember.name} ({frmSelectedMember.relationship})
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
