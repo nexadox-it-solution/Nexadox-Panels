@@ -48,7 +48,7 @@ export default function InvoicesPage() {
       const { data, error } = await supabase
         .from("invoices")
         .select("*")
-        .order("invoice_date", { ascending: false });
+        .order("id", { ascending: false });
 
       if (error) throw error;
       setInvoices(data || []);
@@ -159,6 +159,7 @@ export default function InvoicesPage() {
           <table className="w-full border-collapse">
             <thead>
               <tr className="border-b bg-gray-100 dark:bg-gray-800">
+                <th className="text-left p-3 font-semibold text-sm">INVOICE #</th>
                 <th className="text-left p-3 font-semibold text-sm">TXNID</th>
                 <th className="text-left p-3 font-semibold text-sm">BOOKINGID</th>
                 <th className="text-left p-3 font-semibold text-sm">USERID</th>
@@ -167,7 +168,6 @@ export default function InvoicesPage() {
                 <th className="text-left p-3 font-semibold text-sm">TOTAL AMOUNT</th>
                 <th className="text-left p-3 font-semibold text-sm">TAXABLE AMOUNT</th>
                 <th className="text-left p-3 font-semibold text-sm">GST</th>
-                <th className="text-left p-3 font-semibold text-sm">INVOICE #</th>
                 <th className="text-left p-3 font-semibold text-sm">DATE</th>
                 <th className="text-left p-3 font-semibold text-sm">ACTION</th>
               </tr>
@@ -182,6 +182,7 @@ export default function InvoicesPage() {
               ) : (
                 filteredInvoices.map((invoice) => (
                   <tr key={invoice.id} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <td className="p-3 text-sm font-medium">INV{String(invoice.id).padStart(8, '0')}</td>
                     <td className="p-3 text-sm">{invoice.txn_id}</td>
                     <td className="p-3 text-sm">NXD{String(invoice.appointment_id || 0).padStart(8, '0')}</td>
                     <td className="p-3 text-sm">{invoice.user_id}</td>
@@ -190,7 +191,6 @@ export default function InvoicesPage() {
                     <td className="p-3 text-sm font-medium">{invoice.total_amount}</td>
                     <td className="p-3 text-sm">{invoice.taxable_amount}</td>
                     <td className="p-3 text-sm">{invoice.gst}</td>
-                    <td className="p-3 text-sm">INV{String(invoice.id).padStart(8, '0')}</td>
                     <td className="p-3 text-sm">{invoice.invoice_date}</td>
                     <td className="p-3 text-sm">
                       <Link href={`/admin/invoices/${invoice.id}`}>
