@@ -113,17 +113,20 @@ export default function CheckInPage() {
         }
       } catch (_e) { /* fallback: show all if attendant record not found */ }
 
-      // 2. Fetch appointments scoped to this attendant's assignments
-      const aptRes = await fetch(`/api/attendant/appointments?date=${today}&status=scheduled${doctorIdsParam}${clinicIdsParam}`);
-      const aptJson = await aptRes.json();
-      const allApts: Appointment[] = aptJson.appointments || [];
-      // Filter: only today's scheduled + pending checkin
-      const pending = allApts.filter(a =>
-        a.appointment_date === today &&
-        a.status === "scheduled" &&
-        (!a.checkin_status || a.checkin_status === "pending")
+      // 2. Fetch ALL today's appointments (scheduled + waiting/checked-in)
+      const [pendingRes, checkedInRes] = await Promise.all([
+        fetch(`/api/attendant/appointments?date=${today}&status=scheduled${doctorIdsParam}${clinicIdsParam}`),
+        fetch(`/api/attendant/appointments?date=${today}&status=waiting${doctorIdsParam}${clinicIdsParam}`),
+      ]);
+      const pendingJson = await pendingRes.json();
+      const checkedInJson = await checkedInRes.json();
+      const pendingApts: Appointment[] = (pendingJson.appointments || []).filter((a: Appointment) =>
+        a.appointment_date === today && (!a.checkin_status || a.checkin_status === "pending")
       );
-      setAppointments(pending);
+      const checkedInApts: Appointment[] = (checkedInJson.appointments || []).filter((a: Appointment) =>
+        a.appointment_date === today && a.checkin_status === "checked_in"
+      );
+      setAppointments([...pendingApts, ...checkedInApts]);
 
       // Fetch doctors
       const docRes = await fetch("/api/attendant/doctors");
@@ -145,6 +148,20 @@ export default function CheckInPage() {
     const q = searchQuery.toLowerCase();
     return !q || a.patient_name?.toLowerCase().includes(q) || a.appointment_id?.toLowerCase().includes(q) || a.patient_phone?.includes(q);
   });
+
+  /* Group by doctor */
+  const pendingFiltered = filtered.filter(a => !a.checkin_status || a.checkin_status === "pending");
+  const checkedInFiltered = filtered.filter(a => a.checkin_status === "checked_in");
+  const doctorIds = [...new Set(filtered.map(a => a.doctor_id).filter(Boolean))] as number[];
+  const groupedByDoctor = doctorIds.map(docId => ({
+    doctorId: docId,
+    doctorName: doctorMap.get(docId) || "Unknown Doctor",
+    pending: pendingFiltered.filter(a => a.doctor_id === docId),
+    checkedIn: checkedInFiltered.filter(a => a.doctor_id === docId),
+  }));
+  // Also handle appointments with no doctor
+  const noDocPending = pendingFiltered.filter(a => !a.doctor_id);
+  const noDocCheckedIn = checkedInFiltered.filter(a => !a.doctor_id);
 
   /* ── Open check-in modal ──────────────────────────────────── */
   const openCheckin = (apt: Appointment) => {
@@ -271,7 +288,7 @@ export default function CheckInPage() {
         <Card>
           <CardHeader>
             <CardTitle>Today&apos;s Appointments</CardTitle>
-            <CardDescription>{filtered.length} patient(s) pending check-in</CardDescription>
+            <CardDescription>{pendingFiltered.length} pending check-in · {checkedInFiltered.length} checked in</CardDescription>
           </CardHeader>
           <CardContent>
             {filtered.length === 0 ? (
@@ -280,31 +297,113 @@ export default function CheckInPage() {
                 <p className="text-muted-foreground">{searchQuery ? "No matching appointments" : "No pending check-ins for today"}</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {filtered.map(apt => (
-                  <div key={apt.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm">
-                          {apt.patient_name?.charAt(0)}
-                        </div>
-                        <div>
-                          <h4 className="font-semibold">{apt.patient_name}</h4>
-                          <p className="text-sm text-muted-foreground">{apt.patient_phone || apt.patient_email || "—"}</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-3">
-                        <div><span className="text-muted-foreground">Session: </span><span className="font-medium">{apt.slot || apt.appointment_time || "—"}</span></div>
-                        <div><span className="text-muted-foreground">Doctor: </span><span className="font-medium">{doctorMap.get(apt.doctor_id!) || "—"}</span></div>
-                        <div><span className="text-muted-foreground">Gender: </span><span className="font-medium">{apt.patient_gender || "—"}</span></div>
-                        <div><span className="text-muted-foreground">Age: </span><span className="font-medium">{calcAge(apt.patient_dob) ?? "—"}</span></div>
-                      </div>
+              <div className="space-y-6">
+                {groupedByDoctor.map(group => (
+                  <div key={group.doctorId}>
+                    {/* Doctor header */}
+                    <div className="flex items-center gap-2 mb-3 pb-2 border-b-2 border-brand-200">
+                      <Stethoscope className="h-5 w-5 text-brand-600" />
+                      <h3 className="text-lg font-bold text-brand-700">{group.doctorName}</h3>
+                      <span className="text-xs bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full font-medium">
+                        {group.pending.length} pending · {group.checkedIn.length} checked in
+                      </span>
                     </div>
-                    <Button onClick={() => openCheckin(apt)} className="gap-2 bg-brand-600 hover:bg-brand-700">
-                      <UserCheck className="h-4 w-4" /> Check In
-                    </Button>
+                    <div className="space-y-3">
+                      {/* Pending patients first */}
+                      {group.pending.map(apt => (
+                        <div key={apt.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow bg-white">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm">
+                                {apt.patient_name?.charAt(0)}
+                              </div>
+                              <div>
+                                <h4 className="font-semibold">{apt.patient_name}</h4>
+                                <p className="text-sm text-muted-foreground">{apt.patient_phone || apt.patient_email || "—"}</p>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-3">
+                              <div><span className="text-muted-foreground">Session: </span><span className="font-medium">{apt.slot || apt.appointment_time || "—"}</span></div>
+                              <div><span className="text-muted-foreground">Doctor: </span><span className="font-medium">{doctorMap.get(apt.doctor_id!) || "—"}</span></div>
+                              <div><span className="text-muted-foreground">Gender: </span><span className="font-medium">{apt.patient_gender || "—"}</span></div>
+                              <div><span className="text-muted-foreground">Age: </span><span className="font-medium">{calcAge(apt.patient_dob) ?? "—"}</span></div>
+                            </div>
+                          </div>
+                          <Button onClick={() => openCheckin(apt)} className="gap-2 bg-brand-600 hover:bg-brand-700">
+                            <UserCheck className="h-4 w-4" /> Check In
+                          </Button>
+                        </div>
+                      ))}
+                      {/* Checked-in patients — shown with green indicator */}
+                      {group.checkedIn.map(apt => (
+                        <div key={apt.id} className="flex items-center justify-between p-4 border-2 border-green-200 rounded-lg bg-green-50/70">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-semibold text-sm">
+                                <CheckCircle className="h-5 w-5" />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-semibold">{apt.patient_name}</h4>
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-600 text-white uppercase">Checked In</span>
+                                </div>
+                                <p className="text-sm text-muted-foreground">{apt.patient_phone || apt.patient_email || "—"}</p>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-3">
+                              <div><span className="text-muted-foreground">Session: </span><span className="font-medium">{apt.slot || apt.appointment_time || "—"}</span></div>
+                              <div><span className="text-muted-foreground">Token: </span><span className="font-bold text-brand-700">#{apt.token_number || "—"}</span></div>
+                              <div><span className="text-muted-foreground">Gender: </span><span className="font-medium">{apt.patient_gender || "—"}</span></div>
+                              <div><span className="text-muted-foreground">Age: </span><span className="font-medium">{calcAge(apt.patient_dob) ?? "—"}</span></div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 text-green-700">
+                            <CheckCircle className="h-5 w-5" />
+                            <span className="text-sm font-semibold">Done</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
+                {/* Appointments with no doctor assigned */}
+                {(noDocPending.length > 0 || noDocCheckedIn.length > 0) && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3 pb-2 border-b-2 border-gray-200">
+                      <Stethoscope className="h-5 w-5 text-gray-400" />
+                      <h3 className="text-lg font-bold text-gray-500">Unassigned Doctor</h3>
+                    </div>
+                    <div className="space-y-3">
+                      {noDocPending.map(apt => (
+                        <div key={apt.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow bg-white">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm">{apt.patient_name?.charAt(0)}</div>
+                              <div><h4 className="font-semibold">{apt.patient_name}</h4><p className="text-sm text-muted-foreground">{apt.patient_phone || "—"}</p></div>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-3">
+                              <div><span className="text-muted-foreground">Session: </span><span className="font-medium">{apt.slot || "—"}</span></div>
+                              <div><span className="text-muted-foreground">Gender: </span><span className="font-medium">{apt.patient_gender || "—"}</span></div>
+                              <div><span className="text-muted-foreground">Age: </span><span className="font-medium">{calcAge(apt.patient_dob) ?? "—"}</span></div>
+                            </div>
+                          </div>
+                          <Button onClick={() => openCheckin(apt)} className="gap-2 bg-brand-600 hover:bg-brand-700"><UserCheck className="h-4 w-4" /> Check In</Button>
+                        </div>
+                      ))}
+                      {noDocCheckedIn.map(apt => (
+                        <div key={apt.id} className="flex items-center justify-between p-4 border-2 border-green-200 rounded-lg bg-green-50/70">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-700"><CheckCircle className="h-5 w-5" /></div>
+                              <div><div className="flex items-center gap-2"><h4 className="font-semibold">{apt.patient_name}</h4><span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-600 text-white uppercase">Checked In</span></div><p className="text-sm text-muted-foreground">{apt.patient_phone || "—"}</p></div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 text-green-700"><CheckCircle className="h-5 w-5" /><span className="text-sm font-semibold">Done</span></div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
