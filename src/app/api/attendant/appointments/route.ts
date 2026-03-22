@@ -360,9 +360,15 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "id and status required." }, { status: 400 });
     }
 
+    const updatePayload: Record<string, any> = { status, updated_at: new Date().toISOString() };
+    if (status === "completed") {
+      updatePayload.checkin_status = "completed";
+      updatePayload.completion_time = new Date().toISOString();
+    }
+
     const { error } = await getSupabaseAdmin()
       .from("appointments")
-      .update({ status, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq("id", id);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

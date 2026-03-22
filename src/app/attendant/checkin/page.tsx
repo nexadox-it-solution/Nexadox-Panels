@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import {
   UserCheck, Search, User, Calendar, CheckCircle,
   X, Loader, AlertCircle, Activity, Heart, Thermometer,
-  ClipboardCheck, Stethoscope,
+  ClipboardCheck, Stethoscope, CheckSquare,
 } from "lucide-react";
 
 /* ─── Types ─────────────────────────────────────────────────── */
@@ -63,6 +63,8 @@ export default function CheckInPage() {
   const [doctors, setDoctors]           = useState<DoctorRow[]>([]);
   const [loading, setLoading]           = useState(true);
   const [searchQuery, setSearchQuery]   = useState("");
+  const [activeTab, setActiveTab]       = useState<number | null>(null);
+  const [completingId, setCompletingId] = useState<number | null>(null);
 
   /* Check-in modal state */
   const [selectedApt, setSelectedApt]   = useState<Appointment | null>(null);
@@ -113,20 +115,25 @@ export default function CheckInPage() {
         }
       } catch (_e) { /* fallback: show all if attendant record not found */ }
 
-      // 2. Fetch ALL today's appointments (scheduled + waiting/checked-in)
-      const [pendingRes, checkedInRes] = await Promise.all([
+      // 2. Fetch ALL today's appointments (scheduled + waiting/checked-in + completed)
+      const [pendingRes, checkedInRes, completedRes] = await Promise.all([
         fetch(`/api/attendant/appointments?date=${today}&status=scheduled${doctorIdsParam}${clinicIdsParam}`),
         fetch(`/api/attendant/appointments?date=${today}&status=waiting${doctorIdsParam}${clinicIdsParam}`),
+        fetch(`/api/attendant/appointments?date=${today}&status=completed${doctorIdsParam}${clinicIdsParam}`),
       ]);
       const pendingJson = await pendingRes.json();
       const checkedInJson = await checkedInRes.json();
+      const completedJson = await completedRes.json();
       const pendingApts: Appointment[] = (pendingJson.appointments || []).filter((a: Appointment) =>
         a.appointment_date === today && (!a.checkin_status || a.checkin_status === "pending")
       );
       const checkedInApts: Appointment[] = (checkedInJson.appointments || []).filter((a: Appointment) =>
         a.appointment_date === today && a.checkin_status === "checked_in"
       );
-      setAppointments([...pendingApts, ...checkedInApts]);
+      const completedApts: Appointment[] = (completedJson.appointments || []).filter((a: Appointment) =>
+        a.appointment_date === today
+      );
+      setAppointments([...pendingApts, ...checkedInApts, ...completedApts]);
 
       // Fetch doctors
       const docRes = await fetch("/api/attendant/doctors");
@@ -149,19 +156,57 @@ export default function CheckInPage() {
     return !q || a.patient_name?.toLowerCase().includes(q) || a.appointment_id?.toLowerCase().includes(q) || a.patient_phone?.includes(q);
   });
 
-  /* Group by doctor */
-  const pendingFiltered = filtered.filter(a => !a.checkin_status || a.checkin_status === "pending");
+  /* Separate by status */
+  const pendingFiltered   = filtered.filter(a => a.status === "scheduled" && (!a.checkin_status || a.checkin_status === "pending"));
   const checkedInFiltered = filtered.filter(a => a.checkin_status === "checked_in");
+  const completedFiltered = filtered.filter(a => a.status === "completed");
+
+  /* Group by doctor — sorted by token number within each group */
+  const sortByToken = (arr: Appointment[]) =>
+    [...arr].sort((a, b) => (a.token_number || 9999) - (b.token_number || 9999));
+
   const doctorIds = [...new Set(filtered.map(a => a.doctor_id).filter(Boolean))] as number[];
-  const groupedByDoctor = doctorIds.map(docId => ({
-    doctorId: docId,
-    doctorName: doctorMap.get(docId) || "Unknown Doctor",
-    pending: pendingFiltered.filter(a => a.doctor_id === docId),
-    checkedIn: checkedInFiltered.filter(a => a.doctor_id === docId),
-  }));
+
+  const groupedByDoctor = doctorIds.map(docId => {
+    const pending    = sortByToken(pendingFiltered.filter(a => a.doctor_id === docId));
+    const checkedIn  = sortByToken(checkedInFiltered.filter(a => a.doctor_id === docId));
+    const completed  = sortByToken(completedFiltered.filter(a => a.doctor_id === docId));
+    return {
+      doctorId: docId,
+      doctorName: doctorMap.get(docId) || "Unknown Doctor",
+      pending,
+      checkedIn,
+      completed,
+      allDone: pending.length === 0 && checkedIn.length === 0 && completed.length > 0,
+    };
+  });
+
+  // Filter out doctors whose session is fully completed (all patients done, none pending/waiting)
+  const visibleDoctors = groupedByDoctor.filter(g => !g.allDone);
+  // Keep completed doctor tabs in a separate section if needed
+  const completedDoctors = groupedByDoctor.filter(g => g.allDone);
+
   // Also handle appointments with no doctor
-  const noDocPending = pendingFiltered.filter(a => !a.doctor_id);
-  const noDocCheckedIn = checkedInFiltered.filter(a => !a.doctor_id);
+  const noDocPending   = sortByToken(pendingFiltered.filter(a => !a.doctor_id));
+  const noDocCheckedIn = sortByToken(checkedInFiltered.filter(a => !a.doctor_id));
+
+  // Auto-set active tab to first visible doctor if not set or if current tab is no longer visible
+  useEffect(() => {
+    if (visibleDoctors.length > 0) {
+      if (activeTab === null || !visibleDoctors.find(d => d.doctorId === activeTab)) {
+        setActiveTab(visibleDoctors[0].doctorId);
+      }
+    } else if (noDocPending.length > 0 || noDocCheckedIn.length > 0) {
+      setActiveTab(-1); // -1 = unassigned tab
+    } else {
+      setActiveTab(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleDoctors.length, noDocPending.length, noDocCheckedIn.length]);
+
+  const activeGroup = activeTab === -1
+    ? { doctorId: -1, doctorName: "Unassigned Doctor", pending: noDocPending, checkedIn: noDocCheckedIn, completed: [] as Appointment[], allDone: false }
+    : visibleDoctors.find(g => g.doctorId === activeTab) || null;
 
   /* ── Open check-in modal ──────────────────────────────────── */
   const openCheckin = (apt: Appointment) => {
@@ -233,6 +278,36 @@ export default function CheckInPage() {
 
   const bmiDisplay = calcBMI(vHeight, vWeight);
 
+  /* ── Mark patient as completed ────────────────────────────── */
+  const handleComplete = async (apt: Appointment) => {
+    if (completingId) return;
+    setCompletingId(apt.id);
+    try {
+      const res = await fetch("/api/attendant/appointments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: apt.id, status: "completed" }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        console.error("Complete failed:", data.error);
+      }
+      // Also update queue table if it exists
+      try {
+        const { supabase } = await import("@/lib/supabase");
+        await supabase
+          .from("queue")
+          .update({ status: "completed", completion_time: new Date().toISOString() })
+          .eq("appointment_id", apt.id);
+      } catch (_) { /* queue update is best-effort */ }
+      fetchData();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCompletingId(null);
+    }
+  };
+
   /* ─── RENDER ──────────────────────────────────────────────── */
   return (
     <div className="space-y-6">
@@ -281,133 +356,176 @@ export default function CheckInPage() {
         </CardContent>
       </Card>
 
-      {/* Appointments List */}
+      {/* Appointments — Doctor Tabs + List */}
       {loading ? (
         <Card><CardContent className="flex items-center justify-center py-16"><Loader className="h-8 w-8 animate-spin text-brand-600" /><p className="ml-3 text-muted-foreground">Loading…</p></CardContent></Card>
-      ) : (
+      ) : filtered.length === 0 ? (
         <Card>
-          <CardHeader>
-            <CardTitle>Today&apos;s Appointments</CardTitle>
-            <CardDescription>{pendingFiltered.length} pending check-in · {checkedInFiltered.length} checked in</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {filtered.length === 0 ? (
-              <div className="text-center py-12">
-                <UserCheck className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-30" />
-                <p className="text-muted-foreground">{searchQuery ? "No matching appointments" : "No pending check-ins for today"}</p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {groupedByDoctor.map(group => (
-                  <div key={group.doctorId}>
-                    {/* Doctor header */}
-                    <div className="flex items-center gap-2 mb-3 pb-2 border-b-2 border-brand-200">
-                      <Stethoscope className="h-5 w-5 text-brand-600" />
-                      <h3 className="text-lg font-bold text-brand-700">{group.doctorName}</h3>
-                      <span className="text-xs bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full font-medium">
-                        {group.pending.length} pending · {group.checkedIn.length} checked in
-                      </span>
-                    </div>
-                    <div className="space-y-3">
-                      {/* Pending patients first */}
-                      {group.pending.map(apt => (
-                        <div key={apt.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow bg-white">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm">
-                                {apt.patient_name?.charAt(0)}
-                              </div>
-                              <div>
-                                <h4 className="font-semibold">{apt.patient_name}</h4>
-                                <p className="text-sm text-muted-foreground">{apt.patient_phone || apt.patient_email || "—"}</p>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-3">
-                              <div><span className="text-muted-foreground">Session: </span><span className="font-medium">{apt.slot || apt.appointment_time || "—"}</span></div>
-                              <div><span className="text-muted-foreground">Doctor: </span><span className="font-medium">{doctorMap.get(apt.doctor_id!) || "—"}</span></div>
-                              <div><span className="text-muted-foreground">Gender: </span><span className="font-medium">{apt.patient_gender || "—"}</span></div>
-                              <div><span className="text-muted-foreground">Age: </span><span className="font-medium">{calcAge(apt.patient_dob) ?? "—"}</span></div>
-                            </div>
-                          </div>
-                          <Button onClick={() => openCheckin(apt)} className="gap-2 bg-brand-600 hover:bg-brand-700">
-                            <UserCheck className="h-4 w-4" /> Check In
-                          </Button>
-                        </div>
-                      ))}
-                      {/* Checked-in patients — shown with green indicator */}
-                      {group.checkedIn.map(apt => (
-                        <div key={apt.id} className="flex items-center justify-between p-4 border-2 border-green-200 rounded-lg bg-green-50/70">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-semibold text-sm">
-                                <CheckCircle className="h-5 w-5" />
-                              </div>
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <h4 className="font-semibold">{apt.patient_name}</h4>
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-600 text-white uppercase">Checked In</span>
-                                </div>
-                                <p className="text-sm text-muted-foreground">{apt.patient_phone || apt.patient_email || "—"}</p>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-3">
-                              <div><span className="text-muted-foreground">Session: </span><span className="font-medium">{apt.slot || apt.appointment_time || "—"}</span></div>
-                              <div><span className="text-muted-foreground">Token: </span><span className="font-bold text-brand-700">#{apt.token_number || "—"}</span></div>
-                              <div><span className="text-muted-foreground">Gender: </span><span className="font-medium">{apt.patient_gender || "—"}</span></div>
-                              <div><span className="text-muted-foreground">Age: </span><span className="font-medium">{calcAge(apt.patient_dob) ?? "—"}</span></div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 text-green-700">
-                            <CheckCircle className="h-5 w-5" />
-                            <span className="text-sm font-semibold">Done</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                {/* Appointments with no doctor assigned */}
-                {(noDocPending.length > 0 || noDocCheckedIn.length > 0) && (
-                  <div>
-                    <div className="flex items-center gap-2 mb-3 pb-2 border-b-2 border-gray-200">
-                      <Stethoscope className="h-5 w-5 text-gray-400" />
-                      <h3 className="text-lg font-bold text-gray-500">Unassigned Doctor</h3>
-                    </div>
-                    <div className="space-y-3">
-                      {noDocPending.map(apt => (
-                        <div key={apt.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow bg-white">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm">{apt.patient_name?.charAt(0)}</div>
-                              <div><h4 className="font-semibold">{apt.patient_name}</h4><p className="text-sm text-muted-foreground">{apt.patient_phone || "—"}</p></div>
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-3">
-                              <div><span className="text-muted-foreground">Session: </span><span className="font-medium">{apt.slot || "—"}</span></div>
-                              <div><span className="text-muted-foreground">Gender: </span><span className="font-medium">{apt.patient_gender || "—"}</span></div>
-                              <div><span className="text-muted-foreground">Age: </span><span className="font-medium">{calcAge(apt.patient_dob) ?? "—"}</span></div>
-                            </div>
-                          </div>
-                          <Button onClick={() => openCheckin(apt)} className="gap-2 bg-brand-600 hover:bg-brand-700"><UserCheck className="h-4 w-4" /> Check In</Button>
-                        </div>
-                      ))}
-                      {noDocCheckedIn.map(apt => (
-                        <div key={apt.id} className="flex items-center justify-between p-4 border-2 border-green-200 rounded-lg bg-green-50/70">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-700"><CheckCircle className="h-5 w-5" /></div>
-                              <div><div className="flex items-center gap-2"><h4 className="font-semibold">{apt.patient_name}</h4><span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-600 text-white uppercase">Checked In</span></div><p className="text-sm text-muted-foreground">{apt.patient_phone || "—"}</p></div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 text-green-700"><CheckCircle className="h-5 w-5" /><span className="text-sm font-semibold">Done</span></div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+          <CardContent className="py-12 text-center">
+            <UserCheck className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-30" />
+            <p className="text-muted-foreground">{searchQuery ? "No matching appointments" : "No pending check-ins for today"}</p>
           </CardContent>
         </Card>
+      ) : (
+        <>
+          {/* Summary */}
+          <div className="text-sm text-muted-foreground">
+            {pendingFiltered.length} pending check-in · {checkedInFiltered.length} checked in · {completedFiltered.length} completed
+          </div>
+
+          {/* Doctor Tabs */}
+          <div className="flex flex-wrap gap-2">
+            {visibleDoctors.map(g => (
+              <button
+                key={g.doctorId}
+                onClick={() => setActiveTab(g.doctorId)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border-2 transition-all ${
+                  activeTab === g.doctorId
+                    ? "bg-brand-600 text-white border-brand-600 shadow-md"
+                    : "bg-white border-gray-200 text-gray-700 hover:border-brand-300 hover:bg-brand-50"
+                }`}
+              >
+                <Stethoscope className="h-4 w-4" />
+                {g.doctorName}
+                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                  activeTab === g.doctorId ? "bg-white/20 text-white" : "bg-gray-100 text-gray-600"
+                }`}>
+                  {g.pending.length + g.checkedIn.length}
+                </span>
+              </button>
+            ))}
+            {(noDocPending.length > 0 || noDocCheckedIn.length > 0) && (
+              <button
+                onClick={() => setActiveTab(-1)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold border-2 transition-all ${
+                  activeTab === -1
+                    ? "bg-gray-600 text-white border-gray-600 shadow-md"
+                    : "bg-white border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
+                }`}
+              >
+                Unassigned
+                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                  activeTab === -1 ? "bg-white/20 text-white" : "bg-gray-100 text-gray-600"
+                }`}>
+                  {noDocPending.length + noDocCheckedIn.length}
+                </span>
+              </button>
+            )}
+          </div>
+
+          {/* Completed doctor sessions note */}
+          {completedDoctors.length > 0 && (
+            <div className="text-xs text-muted-foreground bg-green-50 border border-green-200 rounded-lg px-4 py-2 flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-green-500" />
+              Session completed: {completedDoctors.map(d => d.doctorName).join(", ")} ({completedDoctors.reduce((s, d) => s + d.completed.length, 0)} patients done)
+            </div>
+          )}
+
+          {/* Active doctor's patient list */}
+          {activeGroup && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Stethoscope className="h-5 w-5 text-brand-600" />
+                  <CardTitle>{activeGroup.doctorName}</CardTitle>
+                </div>
+                <CardDescription>
+                  {activeGroup.pending.length} pending · {activeGroup.checkedIn.length} checked in
+                  {activeGroup.completed.length > 0 && ` · ${activeGroup.completed.length} completed`}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {/* Pending patients — sorted by token number */}
+                  {activeGroup.pending.map(apt => (
+                    <div key={apt.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow bg-white">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm">
+                            {apt.token_number ? `#${apt.token_number}` : apt.patient_name?.charAt(0)}
+                          </div>
+                          <div>
+                            <h4 className="font-semibold">{apt.patient_name}</h4>
+                            <p className="text-sm text-muted-foreground">{apt.patient_phone || apt.patient_email || "—"}</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-3">
+                          <div><span className="text-muted-foreground">Session: </span><span className="font-medium">{apt.slot || apt.appointment_time || "—"}</span></div>
+                          <div><span className="text-muted-foreground">Token: </span><span className="font-bold text-brand-700">#{apt.token_number || "—"}</span></div>
+                          <div><span className="text-muted-foreground">Gender: </span><span className="font-medium">{apt.patient_gender || "—"}</span></div>
+                          <div><span className="text-muted-foreground">Age: </span><span className="font-medium">{calcAge(apt.patient_dob) ?? "—"}</span></div>
+                        </div>
+                      </div>
+                      <Button onClick={() => openCheckin(apt)} className="gap-2 bg-brand-600 hover:bg-brand-700">
+                        <UserCheck className="h-4 w-4" /> Check In
+                      </Button>
+                    </div>
+                  ))}
+
+                  {/* Checked-in patients — with green indicator + Complete button */}
+                  {activeGroup.checkedIn.map(apt => (
+                    <div key={apt.id} className="flex items-center justify-between p-4 border-2 border-green-200 rounded-lg bg-green-50/70">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-bold text-sm">
+                            #{apt.token_number}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold">{apt.patient_name}</h4>
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-600 text-white uppercase">Checked In</span>
+                            </div>
+                            <p className="text-sm text-muted-foreground">{apt.patient_phone || apt.patient_email || "—"}</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-3">
+                          <div><span className="text-muted-foreground">Session: </span><span className="font-medium">{apt.slot || apt.appointment_time || "—"}</span></div>
+                          <div><span className="text-muted-foreground">Token: </span><span className="font-bold text-brand-700">#{apt.token_number || "—"}</span></div>
+                          <div><span className="text-muted-foreground">Gender: </span><span className="font-medium">{apt.patient_gender || "—"}</span></div>
+                          <div><span className="text-muted-foreground">Age: </span><span className="font-medium">{calcAge(apt.patient_dob) ?? "—"}</span></div>
+                        </div>
+                      </div>
+                      <Button
+                        onClick={() => handleComplete(apt)}
+                        disabled={completingId === apt.id}
+                        variant="outline"
+                        className="gap-2 border-orange-300 text-orange-700 hover:bg-orange-50 hover:border-orange-400"
+                      >
+                        {completingId === apt.id
+                          ? <><Loader className="h-4 w-4 animate-spin" /> Completing…</>
+                          : <><CheckSquare className="h-4 w-4" /> Complete</>}
+                      </Button>
+                    </div>
+                  ))}
+
+                  {/* Completed patients for this doctor */}
+                  {activeGroup.completed.length > 0 && (
+                    <div className="mt-4 pt-4 border-t">
+                      <p className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-1">
+                        <CheckCircle className="h-4 w-4 text-green-500" /> Completed ({activeGroup.completed.length})
+                      </p>
+                      {activeGroup.completed.map(apt => (
+                        <div key={apt.id} className="flex items-center justify-between py-2.5 px-4 border-b last:border-b-0 bg-gray-50 rounded mb-1 opacity-70">
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-mono text-muted-foreground">#{apt.token_number || "—"}</span>
+                            <span className="font-medium text-sm">{apt.patient_name}</span>
+                          </div>
+                          <span className="text-xs text-green-600 font-semibold flex items-center gap-1">
+                            <CheckCircle className="h-3.5 w-3.5" /> Done
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {activeGroup.pending.length === 0 && activeGroup.checkedIn.length === 0 && activeGroup.completed.length === 0 && (
+                    <p className="text-center py-8 text-muted-foreground">No appointments for this doctor</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
 
       {/* ── CHECK-IN SLIDE-OVER MODAL ─────────────────────────── */}
