@@ -316,39 +316,100 @@ export default function AttendantSchedulePage() {
         </div>
       ) : (
         /* ── View All Tab ──────────────────────────────────────── */
-        <Card>
-          <CardHeader><CardTitle>Upcoming Schedules — {selectedDoctor?.name}</CardTitle></CardHeader>
-          <CardContent>
-            {loadingSched ? (
-              <div className="flex items-center justify-center py-12"><Loader className="h-6 w-6 animate-spin text-cyan-600" /></div>
-            ) : groupedSchedules.length === 0 ? (
-              <p className="text-center text-muted-foreground py-12">No upcoming schedules</p>
-            ) : (
-              <div className="space-y-4">
-                {groupedSchedules.map(([date, rows]) => (
-                  <div key={date} className="border rounded-xl p-4 space-y-2">
-                    <p className="font-semibold text-sm">{fmtDate(date)}</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {rows.map(r => (
-                        <div key={r.id} className="flex items-center justify-between border rounded-lg px-3 py-2 text-xs">
-                          <span className="flex items-center gap-1.5">
-                            <span>{SESSION_EMOJI[r.slot] || "📅"}</span>
-                            <span className="font-semibold">{r.slot}</span>
-                          </span>
-                          <div className="flex items-center gap-2">
-                            {r.clinic_id && <span className="text-muted-foreground">{clinicMap.get(r.clinic_id)}</span>}
-                            <button onClick={() => handleCycleStatus(r)} className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${statusColor[r.status] || "bg-gray-100"}`}>{r.status}</button>
-                            <button onClick={() => handleDelete(r.id)} className="text-red-400 hover:text-red-600"><Trash2 className="h-3 w-3" /></button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+        <div className="space-y-4">
+          {/* Summary bar */}
+          <Card className="bg-gradient-to-r from-cyan-50 to-blue-50 border-cyan-200">
+            <CardContent className="py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <CalendarClock className="h-6 w-6 text-cyan-600" />
+                <div>
+                  <h2 className="font-bold text-lg text-cyan-900">Upcoming Schedules</h2>
+                  <p className="text-sm text-cyan-700">{selectedDoctor?.name}</p>
+                </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
+              <div className="flex gap-6 text-center">
+                <div>
+                  <p className="text-2xl font-bold text-cyan-700">{groupedSchedules.length}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-cyan-600 font-medium">Days</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-cyan-700">{schedules.length}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-cyan-600 font-medium">Sessions</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {loadingSched ? (
+            <div className="flex items-center justify-center py-12"><Loader className="h-6 w-6 animate-spin text-cyan-600" /></div>
+          ) : groupedSchedules.length === 0 ? (
+            <Card>
+              <CardContent className="py-16 text-center">
+                <CalendarClock className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-muted-foreground font-medium">No upcoming schedules</p>
+                <p className="text-xs text-muted-foreground mt-1">Switch to &ldquo;Add&rdquo; tab to create new sessions</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {groupedSchedules.map(([date, rows]) => {
+                const dateObj = new Date(date + "T00:00:00");
+                const dayName = dateObj.toLocaleDateString("en-IN", { weekday: "long" });
+                const fullDate = dateObj.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+                const isToday = date === new Date().toISOString().split("T")[0];
+
+                return (
+                  <Card key={date} className={`overflow-hidden ${isToday ? "ring-2 ring-cyan-400 shadow-lg" : ""}`}>
+                    {/* Date header */}
+                    <div className={`px-5 py-3 flex items-center justify-between ${isToday ? "bg-gradient-to-r from-cyan-500 to-cyan-600 text-white" : "bg-gray-50 border-b"}`}>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg ${isToday ? "bg-white/20 text-white" : "bg-cyan-100 text-cyan-700"}`}>
+                          {parseInt(date.split("-")[2])}
+                        </div>
+                        <div>
+                          <p className={`font-semibold text-sm ${isToday ? "text-white" : "text-gray-900"}`}>{dayName}</p>
+                          <p className={`text-xs ${isToday ? "text-cyan-100" : "text-muted-foreground"}`}>{fullDate}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isToday && <span className="bg-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">Today</span>}
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isToday ? "bg-white/20 text-white" : "bg-cyan-100 text-cyan-700"}`}>
+                          {rows.length} session{rows.length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Sessions grid */}
+                    <CardContent className="p-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {rows.map(r => (
+                          <div key={r.id} className="group relative flex items-center gap-3 p-3 rounded-xl border bg-white hover:shadow-md transition-all duration-200">
+                            <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center text-xl">
+                              {SESSION_EMOJI[r.slot] || "📅"}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-sm text-gray-900">{r.slot}</p>
+                              {r.clinic_id && <p className="text-xs text-muted-foreground truncate">{clinicMap.get(r.clinic_id)}</p>}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => handleCycleStatus(r)}
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border transition-colors ${statusColor[r.status] || "bg-gray-100"}`}>
+                                {r.status}
+                              </button>
+                              <button onClick={() => handleDelete(r.id)}
+                                className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-all">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
