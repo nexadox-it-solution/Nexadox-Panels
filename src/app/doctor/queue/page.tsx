@@ -110,10 +110,15 @@ export default function QueuePage() {
         .select("*")
         .eq("doctor_id", docId)
         .eq("appointment_date", today)
-        .eq("checkin_status", "checked_in")
+        .in("checkin_status", ["checked_in", "completed"])
         .order("checkin_time", { ascending: true });
 
       const items = (qData || []) as QueueItem[];
+      // Sort: waiting patients first, then completed
+      items.sort((a, b) => {
+        if (a.checkin_status !== b.checkin_status) return a.checkin_status === "checked_in" ? -1 : 1;
+        return 0;
+      });
       setQueue(items);
 
       /* Fetch vitals for all queue items */
@@ -174,8 +179,8 @@ export default function QueuePage() {
   };
 
   /* ── Stats ────────────────────────────────────────────────── */
-  const totalInQueue = queue.length;
-  const avgWait = totalInQueue > 0 ? Math.round(queue.reduce((s, q) => s + waitMins(q.checkin_time), 0) / totalInQueue) : 0;
+  const totalWaiting = queue.filter(q => q.checkin_status === "checked_in").length;
+  const totalCompleted = queue.filter(q => q.checkin_status === "completed").length;
 
   /* ─── RENDER ──────────────────────────────────────────────── */
   return (
@@ -194,12 +199,20 @@ export default function QueuePage() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
-              <div><p className="text-sm text-muted-foreground">In Queue</p><p className="text-3xl font-bold mt-1 text-blue-600">{totalInQueue}</p></div>
+              <div><p className="text-sm text-muted-foreground">Waiting</p><p className="text-3xl font-bold mt-1 text-blue-600">{totalWaiting}</p></div>
               <Clock className="h-8 w-8 text-blue-600 opacity-30" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div><p className="text-sm text-muted-foreground">Completed</p><p className="text-3xl font-bold mt-1 text-green-600">{totalCompleted}</p></div>
+              <CheckCircle className="h-8 w-8 text-green-600 opacity-30" />
             </div>
           </CardContent>
         </Card>
@@ -227,7 +240,7 @@ export default function QueuePage() {
       ) : (
         /* Queue Table */
         <Card>
-          <CardHeader><CardTitle>Waiting Patients ({queue.length})</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{"Today's Patients"} ({queue.length})</CardTitle></CardHeader>
           <CardContent className="p-0 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -243,7 +256,7 @@ export default function QueuePage() {
                   const age = calcAge(apt.patient_dob);
                   const wait = waitMins(apt.checkin_time);
                   return (
-                    <tr key={apt.id} className="border-b hover:bg-blue-50/50 dark:hover:bg-gray-800">
+                    <tr key={apt.id} className={`border-b ${apt.checkin_status === "completed" ? "bg-green-50/30" : ""} hover:bg-blue-50/50 dark:hover:bg-gray-800`}>
                       {/* Queue number */}
                       <td className="py-3 px-3">
                         <div className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-100 text-blue-700 font-bold text-sm">
@@ -281,14 +294,25 @@ export default function QueuePage() {
                       {/* Actions */}
                       <td className="py-3 px-3">
                         <div className="flex items-center gap-2">
-                          <Button size="sm" onClick={() => openCase(apt)} className="gap-1 bg-blue-600 hover:bg-blue-700">
-                            <Stethoscope className="h-3.5 w-3.5" /> Open Case
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => handleComplete(apt)}
-                            disabled={completing === apt.id}
-                            className="gap-1 text-green-700 border-green-300 hover:bg-green-50">
-                            {completing === apt.id ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />} Complete
-                          </Button>
+                          {apt.checkin_status === "completed" ? (
+                            <>
+                              <span className="px-2 py-1 rounded-full text-[10px] font-bold bg-green-100 text-green-700">✓ Done</span>
+                              <Button size="sm" variant="outline" onClick={() => openCase(apt)} className="gap-1 text-blue-700 border-blue-300 hover:bg-blue-50">
+                                <FileText className="h-3.5 w-3.5" /> Edit Rx
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button size="sm" onClick={() => openCase(apt)} className="gap-1 bg-blue-600 hover:bg-blue-700">
+                                <Stethoscope className="h-3.5 w-3.5" /> Open Case
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => handleComplete(apt)}
+                                disabled={completing === apt.id}
+                                className="gap-1 text-green-700 border-green-300 hover:bg-green-50">
+                                {completing === apt.id ? <Loader className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />} Complete
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

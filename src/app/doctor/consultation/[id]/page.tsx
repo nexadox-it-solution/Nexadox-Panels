@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   ArrowLeft, User, Activity, Stethoscope, FileText, Plus, Trash2,
   Loader, CheckCircle, Calendar, Clock, Heart, Thermometer,
   AlertCircle, Save, X, Pill,
@@ -47,6 +50,7 @@ interface VitalsRow {
 }
 
 interface Medicine {
+  type: string;
   name: string;
   dosage: string;
   frequency: string;
@@ -89,8 +93,11 @@ const fmtTime = (iso: string | null) => {
   try { return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }); } catch { return "—"; }
 };
 
-const emptyMedicine = (): Medicine => ({ name: "", dosage: "", frequency: "", duration: "", instructions: "" });
+const emptyMedicine = (): Medicine => ({ type: "", name: "", dosage: "", frequency: "", duration: "", instructions: "" });
 const emptyTest = (): TestItem => ({ name: "", instructions: "" });
+
+const MEDICINE_TYPES = ["Tablet", "Capsule", "Caplet", "Syrup", "Drop", "Emulsion", "Vials", "Ointment", "Cream", "Lotion", "Gel", "Injection"] as const;
+const FREQUENCY_OPTIONS = ["1-0-1", "1-1-1", "1-0-0", "0-0-1", "0-1-0", "1-1-1-1"] as const;
 
 /* ─── Component ─────────────────────────────────────────────── */
 export default function ConsultationPage() {
@@ -226,7 +233,7 @@ export default function ConsultationPage() {
       }).eq("id", apt.id);
 
       if (err) throw err;
-      router.push("/doctor/queue");
+      setApt(prev => prev ? { ...prev, checkin_status: "completed" } : prev);
     } catch (err: any) {
       setError(err?.message || "Failed to complete.");
     }
@@ -373,10 +380,21 @@ export default function ConsultationPage() {
                 {rx.medicines.length > 1 && (
                   <button onClick={() => removeMedicine(i)} className="absolute top-2 right-2 p-1 rounded hover:bg-red-100 text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
                 )}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                  <Select value={med.type || ""} onValueChange={v => updateMedicine(i, "type", v)}>
+                    <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
+                    <SelectContent>
+                      {MEDICINE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                   <Input placeholder="Medicine name *" value={med.name} onChange={e => updateMedicine(i, "name", e.target.value)} />
                   <Input placeholder="Dosage (e.g. 500mg)" value={med.dosage} onChange={e => updateMedicine(i, "dosage", e.target.value)} />
-                  <Input placeholder="Frequency (e.g. 1-0-1)" value={med.frequency} onChange={e => updateMedicine(i, "frequency", e.target.value)} />
+                  <Select value={med.frequency || ""} onValueChange={v => updateMedicine(i, "frequency", v)}>
+                    <SelectTrigger><SelectValue placeholder="Frequency" /></SelectTrigger>
+                    <SelectContent>
+                      {FREQUENCY_OPTIONS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                   <Input placeholder="Duration (e.g. 7 days)" value={med.duration} onChange={e => updateMedicine(i, "duration", e.target.value)} />
                 </div>
                 <Input placeholder="Special instructions (optional)" value={med.instructions} onChange={e => updateMedicine(i, "instructions", e.target.value)} />
