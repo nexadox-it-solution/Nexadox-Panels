@@ -6,9 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   ArrowLeft, User, Activity, Stethoscope, FileText, Plus, Trash2,
   Loader, CheckCircle, Calendar, Clock, Heart, Thermometer,
@@ -381,20 +379,10 @@ export default function ConsultationPage() {
                   <button onClick={() => removeMedicine(i)} className="absolute top-2 right-2 p-1 rounded hover:bg-red-100 text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
                 )}
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-                  <Select value={med.type || ""} onValueChange={v => updateMedicine(i, "type", v)}>
-                    <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
-                    <SelectContent>
-                      {MEDICINE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect value={med.type || ""} onValueChange={v => updateMedicine(i, "type", v)} options={MEDICINE_TYPES} placeholder="Type" />
                   <Input placeholder="Medicine name *" value={med.name} onChange={e => updateMedicine(i, "name", e.target.value)} />
                   <Input placeholder="Dosage (e.g. 500mg)" value={med.dosage} onChange={e => updateMedicine(i, "dosage", e.target.value)} />
-                  <Select value={med.frequency || ""} onValueChange={v => updateMedicine(i, "frequency", v)}>
-                    <SelectTrigger><SelectValue placeholder="Frequency" /></SelectTrigger>
-                    <SelectContent>
-                      {FREQUENCY_OPTIONS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect value={med.frequency || ""} onValueChange={v => updateMedicine(i, "frequency", v)} options={FREQUENCY_OPTIONS} placeholder="Frequency" />
                   <Input placeholder="Duration (e.g. 7 days)" value={med.duration} onChange={e => updateMedicine(i, "duration", e.target.value)} />
                 </div>
                 <Input placeholder="Special instructions (optional)" value={med.instructions} onChange={e => updateMedicine(i, "instructions", e.target.value)} />
