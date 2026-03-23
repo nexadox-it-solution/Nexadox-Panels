@@ -17,28 +17,39 @@ function getSupabaseAdmin() {
 export async function GET(req: NextRequest) {
   try {
     const today = new Date().toISOString().split("T")[0];
+    const url = new URL(req.url);
+    const doctorIdsParam = url.searchParams.get("doctor_ids");
+    const doctorIds = doctorIdsParam
+      ? doctorIdsParam.split(",").map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id))
+      : null;
 
     // Patients currently in queue (checked_in + waiting)
-    const { count: queueCount } = await getSupabaseAdmin()
+    let queueQuery = getSupabaseAdmin()
       .from("appointments")
       .select("id", { count: "exact", head: true })
       .eq("appointment_date", today)
       .in("status", ["waiting", "in_progress"])
       .eq("checkin_status", "checked_in");
+    if (doctorIds?.length) queueQuery = queueQuery.in("doctor_id", doctorIds);
+    const { count: queueCount } = await queueQuery;
 
     // Today's total check-ins (patients already checked in)
-    const { count: checkinCount } = await getSupabaseAdmin()
+    let checkinQuery = getSupabaseAdmin()
       .from("appointments")
       .select("id", { count: "exact", head: true })
       .eq("appointment_date", today)
       .not("checkin_time", "is", "null");
+    if (doctorIds?.length) checkinQuery = checkinQuery.in("doctor_id", doctorIds);
+    const { count: checkinCount } = await checkinQuery;
 
     // Today's total appointments (pending + checked-in)
-    const { count: todayTotal } = await getSupabaseAdmin()
+    let totalQuery = getSupabaseAdmin()
       .from("appointments")
       .select("id", { count: "exact", head: true })
       .eq("appointment_date", today)
       .neq("status", "cancelled");
+    if (doctorIds?.length) totalQuery = totalQuery.in("doctor_id", doctorIds);
+    const { count: todayTotal } = await totalQuery;
 
     return NextResponse.json({
       currentQueueCount: queueCount || 0,

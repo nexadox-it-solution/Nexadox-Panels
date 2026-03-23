@@ -11,7 +11,6 @@ import {
   Clock,
   User,
   Users,
-  Settings,
   Menu,
   X,
   ClipboardList,
@@ -33,20 +32,42 @@ export default function AttendantLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [stats, setStats] = useState({ currentQueueCount: 0, todayCheckIns: 0, todayAppointments: 0 });
 
-  /* Fetch real sidebar stats */
+  /* Fetch real sidebar stats — scoped to attendant's assigned doctors */
   useEffect(() => {
-    const fetchStats = async () => {
+    let iv: ReturnType<typeof setInterval>;
+    const init = async () => {
+      // Get attendant's assigned doctor IDs
+      let doctorIdsParam = "";
       try {
-        const res = await fetch("/api/attendant/stats");
-        if (res.ok) {
-          const data = await res.json();
-          setStats(data);
+        const session = localStorage.getItem("nexadox-session");
+        const userId = session?.split(":")[0];
+        if (userId) {
+          const { data: attRow } = await supabase
+            .from("attendants")
+            .select("assigned_doctors")
+            .or(`profile_id.eq.${userId},user_id.eq.${userId}`)
+            .limit(1)
+            .single();
+          if (attRow?.assigned_doctors?.length) {
+            doctorIdsParam = `?doctor_ids=${attRow.assigned_doctors.join(",")}`;
+          }
         }
-      } catch (e) { console.error("Stats fetch error:", e); }
+      } catch (_) { /* fallback: no filter */ }
+
+      const fetchStats = async () => {
+        try {
+          const res = await fetch(`/api/attendant/stats${doctorIdsParam}`);
+          if (res.ok) {
+            const data = await res.json();
+            setStats(data);
+          }
+        } catch (e) { console.error("Stats fetch error:", e); }
+      };
+      fetchStats();
+      iv = setInterval(fetchStats, 30000);
     };
-    fetchStats();
-    const iv = setInterval(fetchStats, 30000);
-    return () => clearInterval(iv);
+    init();
+    return () => { if (iv) clearInterval(iv); };
   }, []);
 
   const navigation = [
@@ -88,10 +109,10 @@ export default function AttendantLayout({
       current: pathname === "/attendant/patients",
     },
     {
-      name: "Settings",
-      href: "/attendant/settings",
-      icon: Settings,
-      current: pathname?.startsWith("/attendant/settings"),
+      name: "Profile",
+      href: "/attendant/profile",
+      icon: User,
+      current: pathname?.startsWith("/attendant/profile"),
     },
   ];
 
