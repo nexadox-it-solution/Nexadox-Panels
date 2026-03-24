@@ -62,7 +62,7 @@ export default function WalletPage() {
       const session = localStorage.getItem("nexadox-session") || "";
       const userId = session.split(":")[0];
       const url = userId ? `/api/agent/wallet?userId=${userId}` : `/api/agent/wallet`;
-      const res = await fetch(url);
+      const res = await fetch(url, { cache: 'no-store' });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         console.error("[Wallet] API error:", res.status, errData);

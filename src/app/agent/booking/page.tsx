@@ -173,7 +173,7 @@ export default function AgentBookingPage() {
         const userId = sessionUserId || user?.id;
         if (userId) {
           // Use server API to fetch agent data (bypasses RLS — same as layout/wallet page)
-          const walletRes = await fetch(`/api/agent/wallet?userId=${userId}`);
+          const walletRes = await fetch(`/api/agent/wallet?userId=${userId}`, { cache: 'no-store' });
           if (walletRes.ok) {
             const walletData = await walletRes.json();
             if (walletData.agent) {

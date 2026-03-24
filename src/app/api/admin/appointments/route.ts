@@ -414,13 +414,23 @@ export async function POST(req: NextRequest) {
         const currentBalance = Number(agentRecord.wallet_balance) || 0;
         const newBalance = Math.max(0, currentBalance - payable_amount);
 
-        await getSupabaseAdmin()
+        // Try with updated_at first, fall back without it if column doesn't exist
+        const { error: walletErr } = await getSupabaseAdmin()
           .from("agents")
-          .update({
-            wallet_balance: newBalance,
-            updated_at: new Date().toISOString(),
-          })
+          .update({ wallet_balance: newBalance, updated_at: new Date().toISOString() })
           .eq("id", agentRecord.id);
+
+        if (walletErr) {
+          console.error("Wallet deduction attempt 1 error:", walletErr.message);
+          // Retry without updated_at in case column doesn't exist
+          const { error: walletErr2 } = await getSupabaseAdmin()
+            .from("agents")
+            .update({ wallet_balance: newBalance })
+            .eq("id", agentRecord.id);
+          if (walletErr2) {
+            console.error("Wallet deduction attempt 2 error:", walletErr2.message);
+          }
+        }
       } catch (e) {
         console.error("Agent wallet deduction error:", e);
       }

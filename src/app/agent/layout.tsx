@@ -58,7 +58,7 @@ export default function AgentLayout({ children }: AgentLayoutProps) {
         const session = localStorage.getItem("nexadox-session") || "";
         const userId = session.split(":")[0];
         const url = userId ? `/api/agent/wallet?userId=${userId}` : `/api/agent/wallet`;
-        const res = await fetch(url);
+        const res = await fetch(url, { cache: 'no-store' });
         if (!res.ok) return;
         const data = await res.json();
         setAgentData({

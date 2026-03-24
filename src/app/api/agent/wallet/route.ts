@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(100);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       profile: {
         id: profile.id,
         name: profile.name,
@@ -103,6 +103,8 @@ export async function GET(req: NextRequest) {
       },
       transactions: txns || [],
     });
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    return response;
   } catch (err: any) {
     console.error("Agent wallet API error:", err);
     return NextResponse.json({ error: err?.message || "Server error" }, { status: 500 });
