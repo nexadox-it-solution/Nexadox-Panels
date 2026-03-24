@@ -13,32 +13,50 @@ function getSupabaseAdmin() {
 /**
  * GET /api/admin/wallet
  * Returns all agents with their wallet info + profile name/email.
+ * Uses the same merge pattern as the working agents page:
+ * 1. Fetch profiles where role='agent'
+ * 2. Fetch agent detail rows
+ * 3. Merge them together
  */
 export async function GET() {
   try {
     const admin = getSupabaseAdmin();
-    const { data: agents, error } = await admin
-      .from("agents")
-      .select("id, user_id, wallet_balance, wallet_earnings, business_name, approval_status");
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-    // Enrich with profile name/email
-    const userIds = (agents || []).map((a) => a.user_id).filter(Boolean);
-    const { data: profiles } = await admin
+    // 1. Get all agent profiles (source of truth for name/email/phone)
+    const { data: profiles, error: pErr } = await admin
       .from("profiles")
-      .select("id, name, email, phone")
-      .in("id", userIds);
+      .select("id, name, email, phone, status, created_at")
+      .eq("role", "agent")
+      .order("created_at", { ascending: false });
 
-    const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+    if (pErr) return NextResponse.json({ error: pErr.message }, { status: 500 });
 
-    const enriched = (agents || []).map((a) => {
-      const p = profileMap.get(a.user_id);
+    // 2. Get all agent detail rows (wallet, commission, business info)
+    const { data: agentRows } = await admin
+      .from("agents")
+      .select("id, user_id, wallet_balance, business_name, approval_status, commission_type, commission_value");
+
+    // 3. Build lookups: profile_id → agent detail, user_id → agent detail
+    const byProfileId: Record<string, any> = {};
+    const byUserId: Record<string, any> = {};
+    (agentRows || []).forEach((a: any) => {
+      if (a.profile_id) byProfileId[String(a.profile_id)] = a;
+      if (a.user_id) byUserId[String(a.user_id)] = a;
+    });
+
+    // 4. Merge: profile is primary, agent detail adds wallet/business info
+    const enriched = (profiles || []).map((p: any) => {
+      const ag = byProfileId[String(p.id)] || byUserId[String(p.id)];
       return {
-        ...a,
-        name: p?.name || a.business_name || "—",
-        email: p?.email || "—",
-        phone: p?.phone || "—",
+        id: ag?.id || p.id,          // agent row id (needed for wallet update)
+        user_id: p.id,                // profile id (needed for transaction record)
+        name: p.name || "—",
+        email: p.email || "—",
+        phone: p.phone || "—",
+        business_name: ag?.business_name || null,
+        approval_status: ag?.approval_status || "pending",
+        wallet_balance: ag?.wallet_balance || 0,
+        wallet_earnings: 0,
       };
     });
 
@@ -57,21 +75,36 @@ export async function POST(req: NextRequest) {
   try {
     const { agent_id, user_id, amount, reason } = await req.json();
 
-    if (!agent_id || !user_id || !amount || Number(amount) <= 0) {
-      return NextResponse.json({ error: "agent_id, user_id, and a positive amount are required" }, { status: 400 });
+    if (!user_id || !amount || Number(amount) <= 0) {
+      return NextResponse.json({ error: "user_id and a positive amount are required" }, { status: 400 });
     }
 
     const admin = getSupabaseAdmin();
     const numAmount = Number(amount);
 
-    // 1. Get current wallet balance
-    const { data: agent, error: agErr } = await admin
-      .from("agents")
-      .select("wallet_balance")
-      .eq("id", agent_id)
-      .single();
+    // 1. Find agent row — try by id first, then by user_id
+    let agent: any = null;
+    let agentRowId: string | null = null;
 
-    if (agErr || !agent) {
+    if (agent_id) {
+      const { data } = await admin
+        .from("agents")
+        .select("id, wallet_balance")
+        .eq("id", agent_id)
+        .single();
+      if (data) { agent = data; agentRowId = data.id; }
+    }
+
+    if (!agent) {
+      const { data } = await admin
+        .from("agents")
+        .select("id, wallet_balance")
+        .eq("user_id", user_id)
+        .single();
+      if (data) { agent = data; agentRowId = data.id; }
+    }
+
+    if (!agent || !agentRowId) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
 
@@ -82,7 +115,7 @@ export async function POST(req: NextRequest) {
     const { error: updateErr } = await admin
       .from("agents")
       .update({ wallet_balance: newBalance, updated_at: new Date().toISOString() })
-      .eq("id", agent_id);
+      .eq("id", agentRowId);
 
     if (updateErr) {
       return NextResponse.json({ error: "Failed to update wallet balance" }, { status: 500 });
