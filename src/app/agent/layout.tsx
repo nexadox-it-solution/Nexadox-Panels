@@ -34,7 +34,7 @@ const sidebarLinks = [
   { title: "My Bookings", href: "/agent/bookings", icon: Clock },
   { title: "Reports", href: "/agent/reports", icon: FileText },
   { title: "Earnings", href: "/agent/earnings", icon: TrendingUp },
-  { title: "Settings", href: "/agent/settings", icon: Settings },
+  { title: "Change Password", href: "/agent/change-password", icon: Settings },
 ];
 
 const inr = (v: number) => `₹${v.toLocaleString("en-IN")}`;
@@ -65,7 +65,7 @@ export default function AgentLayout({ children }: AgentLayoutProps) {
         setAgentData({
           name: data.profile?.name || "Agent User",
           email: data.profile?.email || "",
-          walletBalance: data.agent?.wallet_balance || 0,
+          walletBalance: data.agent?.wallet_earnings || 0,
           approvalStatus: "approved",
           commissionRate: Number(data.agent?.commission_value) || 30,
         });
