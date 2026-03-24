@@ -64,7 +64,7 @@ export default function AgentLayout({ children }: AgentLayoutProps) {
         setAgentData({
           name: data.profile?.name || "Agent User",
           email: data.profile?.email || "",
-          walletBalance: data.agent?.wallet_earnings || 0,
+          walletBalance: data.agent?.wallet_balance || 0,
           approvalStatus: "approved",
           commissionRate: Number(data.agent?.commission_value) || 30,
         });

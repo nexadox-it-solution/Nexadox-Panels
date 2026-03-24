@@ -49,11 +49,10 @@ export async function GET(req: NextRequest) {
     /* ── 2. Get agent record ─────────────────────────────── */
     let agent: any = null;
 
-    const AGENT_COLS = "id, wallet_balance, commission_value, commission_type, wallet_earnings, total_bookings, approval_status, business_name, business_address, pan_number, gst_number, user_id";
-
+    // Use select("*") to avoid silent failure when a column name doesn't exist
     const { data: byProfile } = await getSupabaseAdmin()
       .from("agents")
-      .select(AGENT_COLS)
+      .select("*")
       .eq("profile_id", authUserId)
       .single();
 
@@ -62,7 +61,7 @@ export async function GET(req: NextRequest) {
     } else {
       const { data: byUser } = await getSupabaseAdmin()
         .from("agents")
-        .select(AGENT_COLS)
+        .select("*")
         .eq("user_id", authUserId)
         .single();
       agent = byUser;

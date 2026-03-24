@@ -85,10 +85,10 @@ export async function POST(req: NextRequest) {
        Agent must have sufficient wallet balance to cover payableAmount.
     ────────────────────────────────────────────────────────── */
     let agentRecord: any = null;
-    if (source_role === "Agent" && agent_id && payable_amount > 0) {
+    if (source_role === "Agent" && agent_id) {
       const { data: agData, error: agErr } = await getSupabaseAdmin()
         .from("agents")
-        .select("id, wallet_balance")
+        .select("*")
         .eq("id", agent_id)
         .single();
 
@@ -218,7 +218,13 @@ export async function POST(req: NextRequest) {
       notes: notes || null,
       token_number: assignedToken,
     };
-    if (source_role === "Agent" && agent_user_id) insertPayload.created_by_agent_id = agent_user_id;
+    if (source_role === "Agent" && agent_id) {
+      // created_by_agent_id references users(id) INT — only set if user_id is a valid integer
+      const agentUserId = agentRecord?.user_id;
+      if (agentUserId != null && Number.isInteger(Number(agentUserId))) {
+        insertPayload.created_by_agent_id = Number(agentUserId);
+      }
+    }
 
     // Strategy 1: full insert
     let aptData: any = null;

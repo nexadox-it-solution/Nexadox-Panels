@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
-import { resolveAgent } from "@/lib/resolveRole";
 import LocationMapPicker from "@/components/ui/location-map-picker";
 
 /* ─── Types ─────────────────────────────────────────────────── */
@@ -173,12 +172,16 @@ export default function AgentBookingPage() {
         const { data: { user } } = await supabase.auth.getUser();
         const userId = sessionUserId || user?.id;
         if (userId) {
-          const ag = await resolveAgent(userId);
-          if (ag) {
-            setAgentUserId(userId);
-            setAgentId(ag.id);
-            setAgentCommissionRate(ag.commission_value || 30);
-            setWalletBalance(Number(ag.wallet_balance) || 0);
+          // Use server API to fetch agent data (bypasses RLS — same as layout/wallet page)
+          const walletRes = await fetch(`/api/agent/wallet?userId=${userId}`);
+          if (walletRes.ok) {
+            const walletData = await walletRes.json();
+            if (walletData.agent) {
+              setAgentUserId(userId);
+              setAgentId(walletData.agent.id);
+              setAgentCommissionRate(Number(walletData.agent.commission_value) || 30);
+              setWalletBalance(Number(walletData.agent.wallet_balance) || 0);
+            }
           }
         }
         const [clinicRes, docRes, specRes] = await Promise.all([
