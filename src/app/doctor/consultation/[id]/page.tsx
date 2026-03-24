@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { SearchableCombobox } from "@/components/ui/searchable-combobox";
 import {
   ArrowLeft, User, Activity, Stethoscope, FileText, Plus, Trash2,
   Loader, CheckCircle, Calendar, Clock, Heart, Thermometer,
@@ -50,6 +51,7 @@ interface VitalsRow {
 interface Medicine {
   type: string;
   name: string;
+  composition: string;
   dosage: string;
   frequency: string;
   duration: string;
@@ -63,11 +65,11 @@ interface TestItem {
 
 interface Prescription {
   id?: number;
+  complaint: string;
   diagnosis: string;
   notes: string;
   medicines: Medicine[];
   tests: TestItem[];
-  follow_up_date: string;
 }
 
 /* ─── Helpers ───────────────────────────────────────────────── */
@@ -91,7 +93,7 @@ const fmtTime = (iso: string | null) => {
   try { return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }); } catch { return "—"; }
 };
 
-const emptyMedicine = (): Medicine => ({ type: "", name: "", dosage: "", frequency: "", duration: "", instructions: "" });
+const emptyMedicine = (): Medicine => ({ type: "", name: "", composition: "", dosage: "", frequency: "", duration: "", instructions: "" });
 const emptyTest = (): TestItem => ({ name: "", instructions: "" });
 
 const MEDICINE_TYPES = ["Tablet", "Capsule", "Caplet", "Syrup", "Drop", "Emulsion", "Vials", "Ointment", "Cream", "Lotion", "Gel", "Injection"] as const;
@@ -111,7 +113,7 @@ export default function ConsultationPage() {
   const [clinicName, setClinicName]     = useState("");
 
   /* Prescription state */
-  const [rx, setRx]                     = useState<Prescription>({ diagnosis: "", notes: "", medicines: [emptyMedicine()], tests: [], follow_up_date: "" });
+  const [rx, setRx]                     = useState<Prescription>({ complaint: "", diagnosis: "", notes: "", medicines: [emptyMedicine()], tests: [] });
   const [existingRxId, setExistingRxId] = useState<number | null>(null);
   const [saving, setSaving]             = useState(false);
   const [saved, setSaved]               = useState(false);
@@ -146,11 +148,11 @@ export default function ConsultationPage() {
       if (rxData) {
         setExistingRxId(rxData.id);
         setRx({
+          complaint: rxData.complaint || "",
           diagnosis: rxData.diagnosis || "",
           notes: rxData.notes || "",
           medicines: (rxData.medicines as Medicine[]) || [emptyMedicine()],
           tests: (rxData.tests as TestItem[]) || [],
-          follow_up_date: rxData.follow_up_date || "",
         });
       }
     } catch (e) { console.error(e); }
@@ -186,25 +188,60 @@ export default function ConsultationPage() {
 
     setSaving(true); setError(""); setSaved(false);
     try {
-      const payload = {
+      const filteredMeds = rx.medicines.filter(m => m.name.trim());
+      const filteredTests = rx.tests.filter(t => t.name.trim());
+
+      const basePayload: Record<string, any> = {
         appointment_id: apt.id,
         doctor_id: apt.doctor_id,
         patient_name: apt.patient_name,
         diagnosis: rx.diagnosis.trim(),
         notes: rx.notes.trim() || null,
-        medicines: rx.medicines.filter(m => m.name.trim()),
-        tests: rx.tests.filter(t => t.name.trim()),
-        follow_up_date: rx.follow_up_date || null,
+        medicines: filteredMeds,
+        tests: filteredTests,
+        follow_up_date: null,
       };
 
-      if (existingRxId) {
-        const { error: err } = await supabase.from("prescriptions").update(payload).eq("id", existingRxId);
-        if (err) throw err;
-      } else {
-        const { data, error: err } = await supabase.from("prescriptions").insert(payload).select("id").single();
-        if (err) throw err;
-        if (data) setExistingRxId(data.id);
+      // Include complaint if column exists (added by migration)
+      const payloadWithComplaint = { ...basePayload, complaint: rx.complaint.trim() || null };
+
+      const trySave = async (payload: Record<string, any>) => {
+        if (existingRxId) {
+          const { error: err } = await supabase.from("prescriptions").update(payload).eq("id", existingRxId);
+          return err;
+        } else {
+          const { data, error: err } = await supabase.from("prescriptions").insert(payload).select("id").single();
+          if (!err && data) setExistingRxId(data.id);
+          return err;
+        }
+      };
+
+      // Try with complaint first; if column missing (42703), retry without
+      let saveErr = await trySave(payloadWithComplaint);
+      if (saveErr?.code === "42703") {
+        saveErr = await trySave(basePayload);
       }
+      if (saveErr) throw saveErr;
+
+      /* Auto-save new values to lookup tables (fire-and-forget) */
+      const saveToLookup = (table: string, values: string[]) => {
+        const unique = [...new Set(values.filter(v => v.trim()))];
+        if (unique.length > 0) {
+          fetch("/api/rx-lookup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ table, values: unique }),
+          }).catch(() => {});
+        }
+      };
+
+      saveToLookup("medicine_names", filteredMeds.map(m => m.name));
+      saveToLookup("compositions", filteredMeds.map(m => m.composition).filter(Boolean));
+      saveToLookup("dosages", filteredMeds.map(m => m.dosage).filter(Boolean));
+      saveToLookup("durations", filteredMeds.map(m => m.duration).filter(Boolean));
+      saveToLookup("test_names", filteredTests.map(t => t.name));
+      if (rx.diagnosis.trim()) saveToLookup("diagnoses", [rx.diagnosis.trim()]);
+      if (rx.complaint.trim()) saveToLookup("complaints", [rx.complaint.trim()]);
 
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -359,6 +396,14 @@ export default function ConsultationPage() {
           <CardDescription>{existingRxId ? "Edit existing prescription" : "Create new prescription"}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Complaint */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold">Complaint</Label>
+            <textarea rows={2} value={rx.complaint} onChange={e => setRx(p => ({ ...p, complaint: e.target.value }))}
+              placeholder="Enter patient's chief complaint…"
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+
           {/* Diagnosis */}
           <div className="space-y-2">
             <Label className="text-sm font-semibold">Diagnosis *</Label>
@@ -378,12 +423,21 @@ export default function ConsultationPage() {
                 {rx.medicines.length > 1 && (
                   <button onClick={() => removeMedicine(i)} className="absolute top-2 right-2 p-1 rounded hover:bg-red-100 text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
                 )}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {/* Type */}
                   <SearchableSelect value={med.type || ""} onValueChange={v => updateMedicine(i, "type", v)} options={MEDICINE_TYPES} placeholder="Type" />
-                  <Input placeholder="Medicine name *" value={med.name} onChange={e => updateMedicine(i, "name", e.target.value)} />
-                  <Input placeholder="Dosage (e.g. 500mg)" value={med.dosage} onChange={e => updateMedicine(i, "dosage", e.target.value)} />
+                  {/* Medicine Name */}
+                  <SearchableCombobox value={med.name} onValueChange={v => updateMedicine(i, "name", v)} lookupTable="medicine_names" placeholder="Medicine name *" />
+                  {/* Composition */}
+                  <SearchableCombobox value={med.composition} onValueChange={v => updateMedicine(i, "composition", v)} lookupTable="compositions" placeholder="Composition" />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {/* Dosage */}
+                  <SearchableCombobox value={med.dosage} onValueChange={v => updateMedicine(i, "dosage", v)} lookupTable="dosages" placeholder="Dosage (e.g. 500mg)" />
+                  {/* Frequency */}
                   <SearchableSelect value={med.frequency || ""} onValueChange={v => updateMedicine(i, "frequency", v)} options={FREQUENCY_OPTIONS} placeholder="Frequency" />
-                  <Input placeholder="Duration (e.g. 7 days)" value={med.duration} onChange={e => updateMedicine(i, "duration", e.target.value)} />
+                  {/* Duration */}
+                  <SearchableCombobox value={med.duration} onValueChange={v => updateMedicine(i, "duration", v)} lookupTable="durations" placeholder="Duration (e.g. 7 days)" />
                 </div>
                 <Input placeholder="Special instructions (optional)" value={med.instructions} onChange={e => updateMedicine(i, "instructions", e.target.value)} />
               </div>
@@ -398,7 +452,7 @@ export default function ConsultationPage() {
             </div>
             {rx.tests.map((test, i) => (
               <div key={i} className="flex gap-2 items-center">
-                <Input placeholder="Test name" value={test.name} onChange={e => updateTest(i, "name", e.target.value)} className="flex-1" />
+                <SearchableCombobox value={test.name} onValueChange={v => updateTest(i, "name", v)} lookupTable="test_names" placeholder="Test name" className="flex-1" />
                 <Input placeholder="Instructions" value={test.instructions} onChange={e => updateTest(i, "instructions", e.target.value)} className="flex-1" />
                 <button onClick={() => removeTest(i)} className="p-1.5 rounded hover:bg-red-100 text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
@@ -411,13 +465,6 @@ export default function ConsultationPage() {
             <textarea rows={2} value={rx.notes} onChange={e => setRx(p => ({ ...p, notes: e.target.value }))}
               placeholder="Additional notes, advice…"
               className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-
-          {/* Follow-up date */}
-          <div className="space-y-2">
-            <Label className="text-sm font-semibold flex items-center gap-1"><Calendar className="h-4 w-4" /> Follow-up Date</Label>
-            <Input type="date" value={rx.follow_up_date} onChange={e => setRx(p => ({ ...p, follow_up_date: e.target.value }))}
-              min={new Date().toISOString().split("T")[0]} className="max-w-xs" />
           </div>
 
           {/* Action buttons */}
