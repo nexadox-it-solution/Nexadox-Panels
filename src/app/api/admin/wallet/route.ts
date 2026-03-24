@@ -12,11 +12,9 @@ function getSupabaseAdmin() {
 
 /**
  * GET /api/admin/wallet
- * Returns all agents with their wallet info + profile name/email.
- * Uses the same merge pattern as the working agents page:
- * 1. Fetch profiles where role='agent'
- * 2. Fetch agent detail rows
- * 3. Merge them together
+ * Returns all agents with wallet info + profile name/email.
+ * Actual DB: agents.id = SERIAL INT, agents.user_id = INT, agents.profile_id = UUID
+ * profiles.id = UUID (auth user id)
  */
 export async function GET() {
   try {
@@ -31,12 +29,12 @@ export async function GET() {
 
     if (pErr) return NextResponse.json({ error: pErr.message }, { status: 500 });
 
-    // 2. Get all agent detail rows (wallet, commission, business info)
+    // 2. Get all agent detail rows
     const { data: agentRows } = await admin
       .from("agents")
-      .select("id, user_id, wallet_balance, business_name, approval_status, commission_type, commission_value");
+      .select("id, user_id, profile_id, wallet_balance, wallet_earnings, total_bookings, business_name, approval_status");
 
-    // 3. Build lookups: profile_id → agent detail, user_id → agent detail
+    // 3. Build lookup by profile_id (UUID) and user_id (INT, stringified)
     const byProfileId: Record<string, any> = {};
     const byUserId: Record<string, any> = {};
     (agentRows || []).forEach((a: any) => {
@@ -48,15 +46,17 @@ export async function GET() {
     const enriched = (profiles || []).map((p: any) => {
       const ag = byProfileId[String(p.id)] || byUserId[String(p.id)];
       return {
-        id: ag?.id || p.id,          // agent row id (needed for wallet update)
-        user_id: p.id,                // profile id (needed for transaction record)
+        agent_id: ag?.id || null,       // agents table INT id (for wallet update)
+        user_id: p.id,                   // profile UUID (for transaction record)
+        has_agent_row: !!ag,
         name: p.name || "—",
         email: p.email || "—",
         phone: p.phone || "—",
         business_name: ag?.business_name || null,
+        status: p.status || "active",
         approval_status: ag?.approval_status || "pending",
-        wallet_balance: ag?.wallet_balance || 0,
-        wallet_earnings: 0,
+        wallet_balance: ag ? (Number(ag.wallet_balance) || 0) : 0,
+        wallet_earnings: ag ? (Number(ag.wallet_earnings) || 0) : 0,
       };
     });
 
@@ -69,95 +69,57 @@ export async function GET() {
 /**
  * POST /api/admin/wallet
  * Add money to an agent's wallet.
- * Body: { user_id, amount, reason? }
- * user_id = profile UUID (always reliable)
+ * Body: { agent_id (INT from agents table), user_id (profile UUID), amount, reason? }
  */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { user_id, amount, reason } = body;
+    const { agent_id, user_id, amount, reason } = body;
 
-    if (!user_id || !amount || Number(amount) <= 0) {
-      return NextResponse.json({ error: "user_id and a positive amount are required" }, { status: 400 });
+    if (!agent_id || !amount || Number(amount) <= 0) {
+      return NextResponse.json({ error: "agent_id and a positive amount are required" }, { status: 400 });
     }
 
     const admin = getSupabaseAdmin();
     const numAmount = Number(amount);
 
-    // 1. Verify this is a real agent profile
-    const { data: profile, error: profErr } = await admin
-      .from("profiles")
-      .select("id, name, email, role")
-      .eq("id", user_id)
-      .single();
-
-    if (profErr || !profile) {
-      return NextResponse.json({ error: `Profile not found for id ${user_id}` }, { status: 404 });
-    }
-
-    // 2. Find agent row by user_id
-    const { data: agentRow } = await admin
+    // 1. Find agent by integer id
+    const { data: agentRow, error: agErr } = await admin
       .from("agents")
-      .select("id, wallet_balance")
-      .eq("user_id", user_id)
+      .select("id, wallet_balance, profile_id, user_id")
+      .eq("id", Number(agent_id))
       .maybeSingle();
 
-    let agentId: string;
-    let currentBalance: number;
-
-    if (agentRow) {
-      agentId = agentRow.id;
-      currentBalance = Number(agentRow.wallet_balance) || 0;
-    } else {
-      // No agent row — create one
-      // First ensure user exists in 'users' table (FK requirement)
-      const { data: userRow } = await admin
-        .from("users")
-        .select("id")
-        .eq("id", user_id)
-        .maybeSingle();
-
-      if (!userRow) {
-        // Create users row from profile data
-        const { error: userCreateErr } = await admin.from("users").insert({
-          id: user_id,
-          role: "agent",
-          name: profile.name || "Agent",
-          email: profile.email || "",
-        });
-        if (userCreateErr) {
-          console.error("Users row create error:", userCreateErr);
-          // Continue anyway — the row might already exist due to race condition
-        }
-      }
-
-      const { data: newAgent, error: createErr } = await admin
-        .from("agents")
-        .insert({ user_id: user_id, wallet_balance: 0 })
-        .select("id, wallet_balance")
-        .single();
-
-      if (createErr || !newAgent) {
-        console.error("Agent row create error:", createErr);
-        return NextResponse.json(
-          { error: `Could not create agent record: ${createErr?.message || "unknown error"}` },
-          { status: 500 }
-        );
-      }
-      agentId = newAgent.id;
-      currentBalance = 0;
+    if (agErr || !agentRow) {
+      return NextResponse.json({ error: `Agent row not found for id ${agent_id}` }, { status: 404 });
     }
 
+    const currentBalance = Number(agentRow.wallet_balance) || 0;
     const newBalance = currentBalance + numAmount;
 
-    // 3. Update wallet balance
+    // 2. Update wallet balance
     const { error: updateErr } = await admin
       .from("agents")
       .update({ wallet_balance: newBalance, updated_at: new Date().toISOString() })
-      .eq("id", agentId);
+      .eq("id", Number(agent_id));
 
     if (updateErr) {
       return NextResponse.json({ error: `Failed to update wallet: ${updateErr.message}` }, { status: 500 });
+    }
+
+    // 3. Get profile name/email for transaction record
+    const profileId = user_id || agentRow.profile_id;
+    let profileName: string | null = null;
+    let profileEmail: string | null = null;
+
+    if (profileId) {
+      const { data: profile } = await admin
+        .from("profiles")
+        .select("name, email")
+        .eq("id", String(profileId))
+        .maybeSingle();
+      profileName = profile?.name || null;
+      profileEmail = profile?.email || null;
     }
 
     // 4. Insert transaction record
@@ -168,9 +130,9 @@ export async function POST(req: NextRequest) {
 
     const { error: txnErr } = await admin.from("agent_transactions").insert({
       txn_id: txnId,
-      user_id: String(user_id),
-      user_name: profile.name || null,
-      user_email: profile.email || null,
+      user_id: profileId ? String(profileId) : String(agent_id),
+      user_name: profileName,
+      user_email: profileEmail,
       reason: reason || "Admin Wallet Top-up",
       amount: numAmount,
       balance: newBalance,

@@ -25,11 +25,13 @@ import {
 } from "lucide-react";
 
 interface Agent {
-  id: string;
-  user_id: string;
-  wallet_balance: string | number;
-  wallet_earnings: string | number;
+  agent_id: number | null;   // agents table INT PK
+  user_id: string;            // profile UUID
+  has_agent_row: boolean;
+  wallet_balance: number;
+  wallet_earnings: number;
   business_name: string | null;
+  status: string;
   approval_status: string;
   name: string;
   email: string;
@@ -76,6 +78,11 @@ export default function AdminWalletPage() {
     const agent = agents.find((a) => a.user_id === selectedAgentId);
     if (!agent) return;
 
+    if (!agent.has_agent_row || !agent.agent_id) {
+      setMessage({ type: "error", text: `${agent.name} does not have a wallet record yet. They need to log in first or be set up in the Agents page.` });
+      return;
+    }
+
     setSubmitting(true);
     setMessage(null);
 
@@ -84,6 +91,7 @@ export default function AdminWalletPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          agent_id: agent.agent_id,
           user_id: agent.user_id,
           amount: Number(amount),
           reason: reason.trim() || "Admin Wallet Top-up",
@@ -199,7 +207,7 @@ export default function AdminWalletPage() {
                 <SelectValue placeholder="Choose agent" />
               </SelectTrigger>
               <SelectContent>
-                {agents.map((a) => (
+                {agents.filter(a => a.has_agent_row).map((a) => (
                   <SelectItem key={a.user_id} value={a.user_id}>
                     {a.name} — {a.email}
                   </SelectItem>
@@ -325,7 +333,7 @@ export default function AdminWalletPage() {
                 ) : (
                   filtered.map((a) => (
                     <tr
-                      key={a.id}
+                      key={a.user_id}
                       className="hover:bg-gray-50/80 dark:hover:bg-gray-800/30 transition-colors"
                     >
                       <td className="px-4 py-3 font-medium">{a.name}</td>
@@ -341,15 +349,18 @@ export default function AdminWalletPage() {
                       <td className="px-4 py-3">
                         <span
                           className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
-                            a.approval_status === "approved"
+                            a.status === "active"
                               ? "text-emerald-700 bg-emerald-50 border-emerald-200"
-                              : a.approval_status === "pending"
-                              ? "text-amber-700 bg-amber-50 border-amber-200"
-                              : "text-red-700 bg-red-50 border-red-200"
+                              : a.status === "inactive"
+                              ? "text-red-700 bg-red-50 border-red-200"
+                              : "text-amber-700 bg-amber-50 border-amber-200"
                           }`}
                         >
-                          {a.approval_status || "—"}
+                          {a.status || "—"}
                         </span>
+                        {!a.has_agent_row && (
+                          <span className="ml-1 text-xs text-muted-foreground">(no wallet)</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-emerald-600">
                         {inr(Number(a.wallet_balance) || 0)}
