@@ -29,10 +29,15 @@ export async function GET() {
 
     if (pErr) return NextResponse.json({ error: pErr.message }, { status: 500 });
 
-    // 2. Get all agent detail rows
-    const { data: agentRows } = await admin
+    // 2. Get ALL agent detail rows — use select("*") to avoid column name issues
+    const { data: agentRows, error: agErr } = await admin
       .from("agents")
-      .select("id, user_id, profile_id, wallet_balance, wallet_earnings, total_bookings, business_name, approval_status");
+      .select("*");
+
+    if (agErr) {
+      console.error("Agents query error:", agErr);
+      return NextResponse.json({ error: agErr.message }, { status: 500 });
+    }
 
     // 3. Build lookup by profile_id (UUID) and user_id (INT, stringified)
     const byProfileId: Record<string, any> = {};
@@ -46,17 +51,16 @@ export async function GET() {
     const enriched = (profiles || []).map((p: any) => {
       const ag = byProfileId[String(p.id)] || byUserId[String(p.id)];
       return {
-        agent_id: ag?.id || null,       // agents table INT id (for wallet update)
+        agent_id: ag?.id ?? null,       // agents table INT id (for wallet update)
         user_id: p.id,                   // profile UUID (for transaction record)
         has_agent_row: !!ag,
         name: p.name || "—",
         email: p.email || "—",
         phone: p.phone || "—",
         business_name: ag?.business_name || null,
-        status: p.status || "active",
         approval_status: ag?.approval_status || "pending",
-        wallet_balance: ag ? (Number(ag.wallet_balance) || 0) : 0,
-        wallet_earnings: ag ? (Number(ag.wallet_earnings) || 0) : 0,
+        wallet_balance: Number(ag?.wallet_balance) || 0,
+        wallet_earnings: Number(ag?.wallet_earnings) || 0,
       };
     });
 

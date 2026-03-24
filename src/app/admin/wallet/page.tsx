@@ -31,7 +31,6 @@ interface Agent {
   wallet_balance: number;
   wallet_earnings: number;
   business_name: string | null;
-  status: string;
   approval_status: string;
   name: string;
   email: string;
@@ -349,14 +348,14 @@ export default function AdminWalletPage() {
                       <td className="px-4 py-3">
                         <span
                           className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
-                            a.status === "active"
+                            a.approval_status?.toLowerCase() === "approved"
                               ? "text-emerald-700 bg-emerald-50 border-emerald-200"
-                              : a.status === "inactive"
+                              : a.approval_status?.toLowerCase() === "rejected"
                               ? "text-red-700 bg-red-50 border-red-200"
                               : "text-amber-700 bg-amber-50 border-amber-200"
                           }`}
                         >
-                          {a.status || "—"}
+                          {a.approval_status ? a.approval_status.charAt(0).toUpperCase() + a.approval_status.slice(1) : "Pending"}
                         </span>
                         {!a.has_agent_row && (
                           <span className="ml-1 text-xs text-muted-foreground">(no wallet)</span>
