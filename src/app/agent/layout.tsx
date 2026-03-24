@@ -28,13 +28,12 @@ interface AgentLayoutProps {
 
 const sidebarLinks = [
   { title: "Dashboard", href: "/agent", icon: LayoutDashboard },
-  { title: "Profile", href: "/agent/profile", icon: User },
   { title: "Wallet", href: "/agent/wallet", icon: Wallet },
   { title: "Book Appointment", href: "/agent/booking", icon: Calendar },
   { title: "My Bookings", href: "/agent/bookings", icon: Clock },
   { title: "Reports", href: "/agent/reports", icon: FileText },
   { title: "Earnings", href: "/agent/earnings", icon: TrendingUp },
-  { title: "Change Password", href: "/agent/change-password", icon: Settings },
+  { title: "Profile", href: "/agent/profile", icon: User },
 ];
 
 const inr = (v: number) => `₹${v.toLocaleString("en-IN")}`;

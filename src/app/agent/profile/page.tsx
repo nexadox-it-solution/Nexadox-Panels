@@ -7,10 +7,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   CheckCircle, Clock, XCircle, User, Building2, Loader,
+  Lock, Eye, EyeOff, AlertCircle,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 export default function AgentProfilePage() {
+  const supabase = createClient();
   const [pageLoading, setPageLoading] = useState(true);
+
+  /* Change password state */
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwMsg, setPwMsg] = useState("");
+  const [pwErr, setPwErr] = useState("");
+  const [pwForm, setPwForm] = useState({ newPassword: "", confirmPassword: "" });
 
   const [formData, setFormData] = useState({
     name: "",
@@ -236,6 +247,61 @@ export default function AgentProfilePage() {
           </CardContent>
         </Card>
       )}
+      {/* Change Password */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Lock className="h-5 w-5 text-blue-600" /> Change Password</CardTitle>
+          <CardDescription>Update your account password. Must be at least 6 characters.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {pwMsg && (
+            <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3 mb-4">
+              <CheckCircle className="h-4 w-4" /> {pwMsg}
+            </div>
+          )}
+          {pwErr && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4">
+              <AlertCircle className="h-4 w-4" /> {pwErr}
+            </div>
+          )}
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            setPwMsg(""); setPwErr("");
+            if (!pwForm.newPassword || pwForm.newPassword.length < 6) { setPwErr("New password must be at least 6 characters."); return; }
+            if (pwForm.newPassword !== pwForm.confirmPassword) { setPwErr("Passwords do not match."); return; }
+            setPwSaving(true);
+            try {
+              const { error } = await supabase.auth.updateUser({ password: pwForm.newPassword });
+              if (error) throw error;
+              setPwMsg("Password changed successfully!");
+              setPwForm({ newPassword: "", confirmPassword: "" });
+            } catch (err: any) { setPwErr(err?.message || "Failed to change password."); }
+            finally { setPwSaving(false); }
+          }} className="space-y-4 max-w-md">
+            <div className="space-y-2">
+              <Label>New Password</Label>
+              <div className="relative">
+                <Input type={showNew ? "text" : "password"} value={pwForm.newPassword} onChange={e => { setPwForm(p => ({ ...p, newPassword: e.target.value })); setPwErr(""); }} placeholder="Enter new password" required />
+                <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Confirm New Password</Label>
+              <div className="relative">
+                <Input type={showConfirm ? "text" : "password"} value={pwForm.confirmPassword} onChange={e => { setPwForm(p => ({ ...p, confirmPassword: e.target.value })); setPwErr(""); }} placeholder="Confirm new password" required />
+                <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+            <Button type="submit" disabled={pwSaving} className="gap-2 bg-blue-600 hover:bg-blue-700">
+              {pwSaving ? <><Loader className="h-4 w-4 animate-spin" /> Changing…</> : <><Lock className="h-4 w-4" /> Change Password</>}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
