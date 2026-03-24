@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 
 interface Agent {
-  id: number;
+  id: string;
   user_id: string;
   wallet_balance: string | number;
   wallet_earnings: string | number;
@@ -84,7 +84,6 @@ export default function AdminWalletPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          agent_id: agent.id !== agent.user_id ? agent.id : null,
           user_id: agent.user_id,
           amount: Number(amount),
           reason: reason.trim() || "Admin Wallet Top-up",

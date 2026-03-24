@@ -69,11 +69,13 @@ export async function GET() {
 /**
  * POST /api/admin/wallet
  * Add money to an agent's wallet.
- * Body: { agent_id, user_id, amount, reason? }
+ * Body: { user_id, amount, reason? }
+ * user_id = profile UUID (always reliable)
  */
 export async function POST(req: NextRequest) {
   try {
-    const { agent_id, user_id, amount, reason } = await req.json();
+    const body = await req.json();
+    const { user_id, amount, reason } = body;
 
     if (!user_id || !amount || Number(amount) <= 0) {
       return NextResponse.json({ error: "user_id and a positive amount are required" }, { status: 400 });
@@ -82,71 +84,83 @@ export async function POST(req: NextRequest) {
     const admin = getSupabaseAdmin();
     const numAmount = Number(amount);
 
-    // 1. Find agent row — try by id first, then by user_id
-    let agent: any = null;
-    let agentRowId: string | null = null;
+    // 1. Verify this is a real agent profile
+    const { data: profile, error: profErr } = await admin
+      .from("profiles")
+      .select("id, name, email, role")
+      .eq("id", user_id)
+      .single();
 
-    if (agent_id) {
-      const { data } = await admin
-        .from("agents")
-        .select("id, wallet_balance")
-        .eq("id", agent_id)
-        .single();
-      if (data) { agent = data; agentRowId = data.id; }
+    if (profErr || !profile) {
+      return NextResponse.json({ error: `Profile not found for id ${user_id}` }, { status: 404 });
     }
 
-    if (!agent) {
-      const { data } = await admin
-        .from("agents")
-        .select("id, wallet_balance")
-        .eq("user_id", user_id)
-        .single();
-      if (data) { agent = data; agentRowId = data.id; }
-    }
+    // 2. Find agent row by user_id
+    const { data: agentRow } = await admin
+      .from("agents")
+      .select("id, wallet_balance")
+      .eq("user_id", user_id)
+      .maybeSingle();
 
-    // If no agent detail row exists, create one (profile exists but agent row missing)
-    if (!agent) {
+    let agentId: string;
+    let currentBalance: number;
+
+    if (agentRow) {
+      agentId = agentRow.id;
+      currentBalance = Number(agentRow.wallet_balance) || 0;
+    } else {
+      // No agent row — create one
+      // First ensure user exists in 'users' table (FK requirement)
+      const { data: userRow } = await admin
+        .from("users")
+        .select("id")
+        .eq("id", user_id)
+        .maybeSingle();
+
+      if (!userRow) {
+        // Create users row from profile data
+        const { error: userCreateErr } = await admin.from("users").insert({
+          id: user_id,
+          role: "agent",
+          name: profile.name || "Agent",
+          email: profile.email || "",
+        });
+        if (userCreateErr) {
+          console.error("Users row create error:", userCreateErr);
+          // Continue anyway — the row might already exist due to race condition
+        }
+      }
+
       const { data: newAgent, error: createErr } = await admin
         .from("agents")
-        .insert({
-          user_id: user_id,
-          wallet_balance: 0,
-          approval_status: "approved",
-          commission_type: "percentage",
-          commission_value: 0,
-        })
+        .insert({ user_id: user_id, wallet_balance: 0 })
         .select("id, wallet_balance")
         .single();
 
       if (createErr || !newAgent) {
-        console.error("Failed to create agent row:", createErr);
-        return NextResponse.json({ error: "Failed to create agent record" }, { status: 500 });
+        console.error("Agent row create error:", createErr);
+        return NextResponse.json(
+          { error: `Could not create agent record: ${createErr?.message || "unknown error"}` },
+          { status: 500 }
+        );
       }
-      agent = newAgent;
-      agentRowId = newAgent.id;
+      agentId = newAgent.id;
+      currentBalance = 0;
     }
 
-    const currentBalance = Number(agent.wallet_balance) || 0;
     const newBalance = currentBalance + numAmount;
 
-    // 2. Update wallet balance
+    // 3. Update wallet balance
     const { error: updateErr } = await admin
       .from("agents")
       .update({ wallet_balance: newBalance, updated_at: new Date().toISOString() })
-      .eq("id", agentRowId);
+      .eq("id", agentId);
 
     if (updateErr) {
-      return NextResponse.json({ error: "Failed to update wallet balance" }, { status: 500 });
+      return NextResponse.json({ error: `Failed to update wallet: ${updateErr.message}` }, { status: 500 });
     }
 
-    // 3. Get agent profile for transaction record
-    const { data: profile } = await admin
-      .from("profiles")
-      .select("name, email")
-      .eq("id", String(user_id))
-      .single();
-
-    // 4. Insert transaction
+    // 4. Insert transaction record
     const txnId =
       "TXN" +
       Date.now().toString(36).toUpperCase() +
@@ -155,8 +169,8 @@ export async function POST(req: NextRequest) {
     const { error: txnErr } = await admin.from("agent_transactions").insert({
       txn_id: txnId,
       user_id: String(user_id),
-      user_name: profile?.name || null,
-      user_email: profile?.email || null,
+      user_name: profile.name || null,
+      user_email: profile.email || null,
       reason: reason || "Admin Wallet Top-up",
       amount: numAmount,
       balance: newBalance,
@@ -166,7 +180,6 @@ export async function POST(req: NextRequest) {
 
     if (txnErr) {
       console.error("Transaction insert error:", txnErr);
-      // Balance already updated — log but don't fail
     }
 
     return NextResponse.json({
