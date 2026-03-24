@@ -24,6 +24,7 @@ import {
   FileText,
   ChevronDown,
   ChevronRight,
+  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -99,6 +100,11 @@ const sidebarLinks = [
     title: "Invoices",
     href: "/admin/invoices",
     icon: BadgeDollarSign,
+  },
+  {
+    title: "Wallet",
+    href: "/admin/wallet",
+    icon: Wallet,
   },
   {
     title: "Transactions",
