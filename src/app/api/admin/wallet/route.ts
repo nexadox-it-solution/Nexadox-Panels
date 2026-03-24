@@ -87,10 +87,10 @@ export async function POST(req: NextRequest) {
     const admin = getSupabaseAdmin();
     const numAmount = Number(amount);
 
-    // 1. Find agent by integer id
+    // 1. Find agent by integer id — use select("*") to avoid column name issues
     const { data: agentRow, error: agErr } = await admin
       .from("agents")
-      .select("id, wallet_balance, profile_id, user_id")
+      .select("*")
       .eq("id", Number(agent_id))
       .maybeSingle();
 
@@ -146,6 +146,13 @@ export async function POST(req: NextRequest) {
 
     if (txnErr) {
       console.error("Transaction insert error:", txnErr);
+      // Transaction failed but wallet was updated — still return success with warning
+      return NextResponse.json({
+        success: true,
+        new_balance: newBalance,
+        txn_id: txnId,
+        warning: `Wallet updated but transaction record failed: ${txnErr.message}`,
+      });
     }
 
     return NextResponse.json({

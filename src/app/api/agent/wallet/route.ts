@@ -71,9 +71,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Agent record not found" }, { status: 404 });
     }
 
-    /* ── 3. Get transactions (match by profile UUID OR numeric user_id) ── */
+    /* ── 3. Get transactions (match by profile UUID, numeric user_id, OR agents.id) ── */
     const possibleIds = [String(authUserId)];
     if (agent.user_id) possibleIds.push(String(agent.user_id));
+    if (agent.id) possibleIds.push(String(agent.id));
+    if (agent.profile_id && String(agent.profile_id) !== String(authUserId)) {
+      possibleIds.push(String(agent.profile_id));
+    }
     const { data: txns } = await getSupabaseAdmin()
       .from("agent_transactions")
       .select("*")
