@@ -104,8 +104,26 @@ export async function POST(req: NextRequest) {
       if (data) { agent = data; agentRowId = data.id; }
     }
 
-    if (!agent || !agentRowId) {
-      return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+    // If no agent detail row exists, create one (profile exists but agent row missing)
+    if (!agent) {
+      const { data: newAgent, error: createErr } = await admin
+        .from("agents")
+        .insert({
+          user_id: user_id,
+          wallet_balance: 0,
+          approval_status: "approved",
+          commission_type: "percentage",
+          commission_value: 0,
+        })
+        .select("id, wallet_balance")
+        .single();
+
+      if (createErr || !newAgent) {
+        console.error("Failed to create agent row:", createErr);
+        return NextResponse.json({ error: "Failed to create agent record" }, { status: 500 });
+      }
+      agent = newAgent;
+      agentRowId = newAgent.id;
     }
 
     const currentBalance = Number(agent.wallet_balance) || 0;

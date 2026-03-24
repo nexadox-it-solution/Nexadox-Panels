@@ -73,7 +73,7 @@ export default function AdminWalletPage() {
       return;
     }
 
-    const agent = agents.find((a) => String(a.id) === selectedAgentId);
+    const agent = agents.find((a) => a.user_id === selectedAgentId);
     if (!agent) return;
 
     setSubmitting(true);
@@ -84,7 +84,7 @@ export default function AdminWalletPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          agent_id: agent.id,
+          agent_id: agent.id !== agent.user_id ? agent.id : null,
           user_id: agent.user_id,
           amount: Number(amount),
           reason: reason.trim() || "Admin Wallet Top-up",
@@ -201,7 +201,7 @@ export default function AdminWalletPage() {
               </SelectTrigger>
               <SelectContent>
                 {agents.map((a) => (
-                  <SelectItem key={a.id} value={String(a.id)}>
+                  <SelectItem key={a.user_id} value={a.user_id}>
                     {a.name} — {a.email}
                   </SelectItem>
                 ))}
