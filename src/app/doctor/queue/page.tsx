@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   Clock, Play, CheckCircle, XCircle, Phone, FileText,
   AlertCircle, Timer, Loader, User, Activity, Stethoscope, Hash,
-  Search, Filter, X, ChevronDown, ChevronUp, Calendar, Mail,
+  Search, Filter, X, ChevronDown, ChevronUp, Calendar, Mail, Printer,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
@@ -448,6 +448,9 @@ export default function QueuePage() {
                               <span className="px-2 py-1 rounded-full text-[10px] font-bold bg-green-100 text-green-700">✓ Done</span>
                               <Button size="sm" variant="outline" onClick={() => openCase(apt)} className="gap-1 text-blue-700 border-blue-300 hover:bg-blue-50">
                                 <FileText className="h-3.5 w-3.5" /> Edit Rx
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => router.push(`/doctor/prescription/print/${apt.id}`)} className="gap-1 text-green-700 border-green-300 hover:bg-green-50">
+                                <Printer className="h-3.5 w-3.5" /> Print Rx
                               </Button>
                             </>
                           ) : (
