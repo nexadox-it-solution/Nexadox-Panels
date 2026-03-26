@@ -612,74 +612,10 @@ export default function AttendantAppointmentsPage() {
     } catch { alert("No prescription found for this appointment."); }
   };
 
-  /* ── Print/Download prescription ─────────────────────────── */
+  /* ── Print/Download prescription — opens the canonical print page ── */
   const printPrescription = () => {
-    const printWindow = window.open("", "_blank", "width=600,height=900");
-    if (!printWindow || !viewPrescription) return;
-    const rx = viewPrescription;
-    const medicines = (rx.medicines || []) as Medicine[];
-    const tests = (rx.tests || []) as TestItem[];
-    const medRows = medicines.map((m, i) => `<tr><td>${i+1}</td><td>${m.name}</td><td>${m.dosage}</td><td>${m.frequency}</td><td>${m.duration}</td><td>${m.instructions || '—'}</td></tr>`).join("");
-    const testRows = tests.map((t, i) => `<tr><td>${i+1}</td><td>${t.name}</td><td>${t.instructions || '—'}</td></tr>`).join("");
-
-    const html = `<!DOCTYPE html>
-<html><head><title>Prescription - ${rx.patient_name}</title>
-<style>
-  body { font-family: Arial, sans-serif; margin: 0; padding: 20px; font-size: 12px; }
-  .header { text-align: center; border-bottom: 2px solid #2563eb; padding-bottom: 10px; margin-bottom: 15px; }
-  .header h1 { margin: 0; font-size: 18px; color: #2563eb; }
-  .header p { margin: 2px 0; font-size: 11px; color: #666; }
-  .rx-symbol { font-size: 28px; font-weight: bold; color: #2563eb; margin: 10px 0; }
-  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; margin-bottom: 15px; }
-  .info-row { display: flex; gap: 8px; padding: 3px 0; }
-  .info-label { font-weight: bold; min-width: 100px; color: #333; }
-  .info-value { color: #555; }
-  .section-title { font-weight: bold; font-size: 13px; margin: 15px 0 8px; padding: 4px 8px; background: #eff6ff; border-left: 3px solid #2563eb; }
-  table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; font-size: 11px; }
-  th { background: #eff6ff; font-weight: bold; }
-  .notes { margin: 15px 0; padding: 10px; background: #fefce8; border: 1px solid #fde68a; border-radius: 6px; font-size: 11px; }
-  .follow-up { margin: 10px 0; padding: 8px 12px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; }
-  .footer { margin-top: 40px; text-align: right; }
-  .footer-line { border-top: 1px solid #333; padding-top: 4px; display: inline-block; min-width: 180px; text-align: center; }
-  @media print { body { padding: 10px; } }
-</style></head><body>
-  <div class="header">
-    <h1>NEXADOX IT SOLUTIONS</h1>
-    <p>Address: Ramkrishna Pally, English Bazar, Malda, WB - 732101</p>
-    <p>info@nexadox.com</p>
-  </div>
-  <div class="rx-symbol">℞</div>
-  <div class="info-grid">
-    <div class="info-row"><span class="info-label">Patient Name:</span><span class="info-value">${rx.patient_name}</span></div>
-    <div class="info-row"><span class="info-label">Date:</span><span class="info-value">${new Date(rx.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span></div>
-    <div class="info-row"><span class="info-label">Doctor:</span><span class="info-value">${rxDoctorName}</span></div>
-    <div class="info-row"><span class="info-label">Clinic:</span><span class="info-value">${rxClinicName}</span></div>
-  </div>
-  <div class="section-title">DIAGNOSIS</div>
-  <p style="padding:0 8px;">${rx.diagnosis || '—'}</p>
-  ${medicines.length > 0 ? `
-  <div class="section-title">MEDICINES</div>
-  <table>
-    <thead><tr><th>#</th><th>Medicine</th><th>Dosage</th><th>Frequency</th><th>Duration</th><th>Instructions</th></tr></thead>
-    <tbody>${medRows}</tbody>
-  </table>` : ''}
-  ${tests.length > 0 ? `
-  <div class="section-title">RECOMMENDED TESTS</div>
-  <table>
-    <thead><tr><th>#</th><th>Test</th><th>Instructions</th></tr></thead>
-    <tbody>${testRows}</tbody>
-  </table>` : ''}
-  ${rx.notes ? `<div class="notes"><strong>Doctor's Notes:</strong> ${rx.notes}</div>` : ''}
-  ${rx.follow_up_date ? `<div class="follow-up"><strong>Follow-up Date:</strong> ${new Date(rx.follow_up_date + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</div>` : ''}
-  <div class="footer">
-    <div class="footer-line">Doctor's Signature<br/><small>${rxDoctorName}</small></div>
-  </div>
-</body></html>`;
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => printWindow.print(), 500);
+    if (!viewPrescription) return;
+    window.open(`/doctor/prescription/print/${viewPrescription.appointment_id}`, "_blank");
   };
 
   const statusColor: Record<string, string> = {
@@ -910,15 +846,20 @@ export default function AttendantAppointmentsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
             {/* Header */}
-            <div className="text-center border-b-2 border-blue-600 p-5">
-              <h1 className="text-xl font-bold text-blue-700">NEXADOX IT SOLUTIONS</h1>
-              <p className="text-xs text-gray-500 mt-1">Address: Ramkrishna Pally, English Bazar, Malda, WB - 732101</p>
-              <p className="text-xs text-gray-500">info@nexadox.com</p>
+            <div className="border-b-2 p-5" style={{ borderColor: "#0D8EAD" }}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-base font-bold" style={{ color: "#0D8EAD" }}>{rxDoctorName || "Doctor"}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold" style={{ color: "#0D8EAD" }}>{rxClinicName || "Clinic"}</p>
+                </div>
+              </div>
             </div>
 
             {/* Rx Symbol & Patient Info */}
             <div className="px-5 mt-4">
-              <div className="text-3xl font-bold text-blue-700 mb-3">℞</div>
+              <div className="text-3xl font-bold mb-3" style={{ color: "#0D8EAD", fontFamily: "serif" }}>℞</div>
               <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
                 <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[90px]">Patient:</span><span className="text-gray-600">{viewPrescription.patient_name}</span></div>
                 <div className="flex gap-2"><span className="font-semibold text-gray-700 min-w-[90px]">Date:</span><span className="text-gray-600">{new Date(viewPrescription.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span></div>
@@ -929,16 +870,16 @@ export default function AttendantAppointmentsPage() {
 
             {/* Diagnosis */}
             <div className="mx-5 mt-4">
-              <div className="font-bold text-sm bg-blue-50 border-l-4 border-blue-600 px-3 py-1.5 mb-2">DIAGNOSIS</div>
+              <div className="font-bold text-sm px-3 py-1.5 mb-2" style={{ background: "#E6F6FA", borderLeft: "4px solid #0D8EAD" }}>DIAGNOSIS</div>
               <p className="text-sm text-gray-700 px-1">{viewPrescription.diagnosis || "—"}</p>
             </div>
 
             {/* Medicines */}
             {(viewPrescription.medicines as Medicine[])?.length > 0 && (
               <div className="mx-5 mt-4">
-                <div className="font-bold text-sm bg-blue-50 border-l-4 border-blue-600 px-3 py-1.5 mb-2">MEDICINES</div>
+                <div className="font-bold text-sm px-3 py-1.5 mb-2" style={{ background: "#E6F6FA", borderLeft: "4px solid #0D8EAD" }}>MEDICINES</div>
                 <table className="w-full text-xs border border-gray-200">
-                  <thead><tr className="bg-blue-50">
+                  <thead><tr style={{ background: "#E6F6FA" }}>
                     <th className="border border-gray-200 px-2 py-1.5 text-left w-8">#</th>
                     <th className="border border-gray-200 px-2 py-1.5 text-left">Medicine</th>
                     <th className="border border-gray-200 px-2 py-1.5 text-left">Dosage</th>
@@ -963,11 +904,11 @@ export default function AttendantAppointmentsPage() {
             {/* Tests */}
             {(viewPrescription.tests as TestItem[])?.length > 0 && (
               <div className="mx-5 mt-4">
-                <div className="font-bold text-sm bg-blue-50 border-l-4 border-blue-600 px-3 py-1.5 mb-2">RECOMMENDED TESTS</div>
+                <div className="font-bold text-sm px-3 py-1.5 mb-2" style={{ background: "#E6F6FA", borderLeft: "4px solid #0D8EAD" }}>RECOMMENDED TESTS</div>
                 <div className="space-y-1 px-1">
                   {(viewPrescription.tests as TestItem[]).map((t, i) => (
                     <div key={i} className="flex items-start gap-2 text-sm">
-                      <span className="font-semibold text-blue-600">{i+1}.</span>
+                      <span className="font-semibold" style={{ color: "#0D8EAD" }}>{i+1}.</span>
                       <div>
                         <span className="font-medium">{t.name}</span>
                         {t.instructions && <span className="text-muted-foreground ml-1">— {t.instructions}</span>}
@@ -1002,7 +943,7 @@ export default function AttendantAppointmentsPage() {
 
             {/* Actions */}
             <div className="flex gap-3 p-5 border-t mt-4">
-              <Button onClick={printPrescription} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white gap-2"><Printer className="h-4 w-4" /> Print / Download</Button>
+              <Button onClick={printPrescription} className="flex-1 text-white gap-2" style={{ backgroundColor: "#0D8EAD" }}><Printer className="h-4 w-4" /> Print / Download</Button>
               <Button onClick={() => setViewPrescription(null)} variant="outline" className="flex-1">Close</Button>
             </div>
           </div>

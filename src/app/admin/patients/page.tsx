@@ -211,15 +211,18 @@ export default function AdminPatientsPage() {
           <Button variant="ghost" onClick={() => { setViewingRx(null); setViewingApt(null); }} className="gap-2">
             <ArrowLeft className="h-4 w-4" /> Back to Patient Records
           </Button>
-          <Button onClick={downloadPrescriptionPDF} disabled={downloading} className="gap-2 bg-blue-600 hover:bg-blue-700">
-            {downloading ? <Loader className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            {downloading ? "Generating PDF…" : "Download PDF"}
+          <Button
+            onClick={() => window.open(`/doctor/prescription/print/${viewingRx?.appointment_id}`, "_blank")}
+            className="gap-2 text-white"
+            style={{ backgroundColor: "#0D8EAD" }}
+          >
+            <Download className="h-4 w-4" /> View / Download PDF
           </Button>
         </div>
 
         <div ref={rxRef} className="bg-white border rounded-xl shadow-lg overflow-hidden" style={{ fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif", color: "#1e293b" }}>
           {/* Header */}
-          <div style={{ background: "linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)", color: "#fff", padding: "24px 32px" }}>
+          <div style={{ background: "#0D8EAD", color: "#fff", padding: "24px 32px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div>
                 <h1 style={{ fontSize: "24px", fontWeight: 700, margin: 0 }}>NexaDox</h1>
