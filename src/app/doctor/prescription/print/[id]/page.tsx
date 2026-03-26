@@ -194,37 +194,73 @@ export default function PrintPrescriptionPage() {
 
   return (
     <>
-      {/* ── Embedded print CSS ────────────────────────────────── */}
+      {/* ── Embedded print + screen layout CSS ─────────────── */}
       <style>{`
+        /* ── Screen: make card A4-tall so footer/signature stay at bottom ── */
+        #rx-printable {
+          display: flex;
+          flex-direction: column;
+          min-height: 297mm;
+        }
+        .rx-body-wrap {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+        }
+        .rx-content-spacer { flex: 1; }
+
+        /* ── Print overrides ── */
         @media print {
           @page { size: A4 portrait; margin: 0; }
           body  { margin: 0; padding: 0;
                   -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .rx-toolbar    { display: none !important; }
+
+          /* The doctor layout sidebar + topbar are already print:hidden via Tailwind.
+             Belt-and-suspenders: hide any remaining layout chrome. */
+          aside, nav { display: none !important; }
+
+          /* Toolbar (Back / Download / Print buttons) */
+          .rx-toolbar { display: none !important; }
+
+          /* Reset screen card styles for clean A4 */
           .rx-screen-card {
-            box-shadow: none !important; margin: 0 !important;
-            max-width: none !important; border: none !important;
+            box-shadow: none !important;
+            margin: 0 !important;
+            max-width: none !important;
+            border: none !important;
+            width: 210mm !important;
+            min-height: 297mm !important;
           }
-          /* Fixed header — top of every printed page */
+
+          /* Header: fixed to top of every printed page */
           .rx-header {
-            position: fixed; top: 10mm; left: 15mm; right: 15mm;
-            background: white; z-index: 100;
-            padding: 0 0 4mm 0;
+            position: fixed;
+            top: 10mm; left: 15mm; right: 15mm;
+            background: white;
+            z-index: 100;
+            padding-bottom: 3mm;
           }
-          /* Body pushed below fixed header / above fixed footer */
+
+          /* Body: leave gap for fixed header (top) and fixed footer (bottom) */
           .rx-body-wrap {
-            margin-top: 58mm;
-            margin-bottom: 30mm;
-            padding: 4mm 15mm 0;
+            margin-top: 56mm !important;
+            padding: 0 15mm 0 !important;
+            /* bottom padding = space for the fixed footer band */
+            padding-bottom: 34mm !important;
           }
-          /* Fixed footer — bottom of every printed page */
+
+          /* Footer: fixed to bottom of every printed page */
           .rx-footer {
-            position: fixed; bottom: 8mm; left: 15mm; right: 15mm;
-            background: white; z-index: 100;
-            padding: 3mm 0 0 0;
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            background: white;
+            z-index: 100;
+            padding: 3mm 15mm 6mm;
+            border-top: 1px solid #e2e8f0;
           }
-          tr           { page-break-inside: avoid; }
-          .rx-section  { page-break-inside: avoid; }
+
+          tr          { page-break-inside: avoid; }
+          .rx-section { page-break-inside: avoid; }
         }
       `}</style>
 
@@ -312,7 +348,6 @@ export default function PrintPrescriptionPage() {
 
         {/* ── BODY ──────────────────────────────────────────── */}
         <div className="rx-body-wrap px-10 pt-5 pb-6">
-
           {/* Patient info grid */}
           <div
             className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm mb-3 p-3 rounded"
@@ -426,8 +461,11 @@ export default function PrintPrescriptionPage() {
             </div>
           )}
 
+          {/* Spacer — grows to push signature to bottom */}
+          <div className="rx-content-spacer" />
+
           {/* Doctor signature */}
-          <div className="mt-12 pt-4 flex justify-end">
+          <div className="pt-8 pb-2 flex justify-end">
             <div className="text-center">
               <div className="border-t border-gray-400 w-48 mb-1" />
               <p className="text-sm font-semibold">{doctorName}</p>
@@ -438,7 +476,7 @@ export default function PrintPrescriptionPage() {
 
         {/* ── FOOTER ────────────────────────────────────────── */}
         <div
-          className="rx-footer px-10 pt-4 pb-8"
+          className="rx-footer px-10 py-4"
           style={{ borderTop: "1px solid #e2e8f0" }}
         >
           <div className="flex items-center justify-between">

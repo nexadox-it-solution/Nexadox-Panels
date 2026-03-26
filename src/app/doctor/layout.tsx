@@ -164,7 +164,7 @@ export default function DoctorLayout({
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 z-50 transform transition-all duration-300 ease-in-out ${
+        className={`print:hidden fixed top-0 left-0 h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 z-50 transform transition-all duration-300 ease-in-out ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         } lg:translate-x-0 ${sidebarCollapsed ? "lg:w-20" : "lg:w-64"} w-64`}
       >
@@ -277,11 +277,11 @@ export default function DoctorLayout({
       </aside>
 
       {/* Main Content */}
-      <div className={`transition-all duration-300 ${
+      <div className={`transition-all duration-300 print:!pl-0 ${
         sidebarCollapsed ? "lg:pl-20" : "lg:pl-64"
       }`}>
         {/* Top Bar */}
-        <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6">
+        <header className="print:hidden h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6">
           <div className="flex items-center gap-2">
             <button
               className="lg:hidden"
