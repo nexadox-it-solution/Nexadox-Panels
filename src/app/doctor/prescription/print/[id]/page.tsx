@@ -162,13 +162,23 @@ export default function PrintPrescriptionPage() {
       const html2pdf = (await import("html2pdf.js")).default;
       const el = document.getElementById("rx-printable");
       if (!el) return;
-      await html2pdf().set({
-        margin: 0,
-        filename: `Prescription_${patientName.replace(/\s+/g, "_")}_${appointmentDate}.pdf`,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, allowTaint: true },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-      }).from(el).save();
+      // Temporarily use natural content height for clean single-page PDF
+      const origMinH = el.style.minHeight;
+      const origShadow = el.style.boxShadow;
+      el.style.minHeight = "auto";
+      el.style.boxShadow = "none";
+      try {
+        await html2pdf().set({
+          margin: 0,
+          filename: `Prescription_${patientName.replace(/\s+/g, "_")}_${appointmentDate}.pdf`,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, allowTaint: true },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        }).from(el).save();
+      } finally {
+        el.style.minHeight = origMinH;
+        el.style.boxShadow = origShadow;
+      }
     } catch (e) { console.error("PDF failed:", e); }
     finally { setDownloading(false); }
   };
@@ -212,17 +222,21 @@ export default function PrintPrescriptionPage() {
         /* ── Print overrides ── */
         @media print {
           @page { size: A4 portrait; margin: 0; }
-          body  { margin: 0; padding: 0;
-                  -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
 
-          /* The doctor layout sidebar + topbar are already print:hidden via Tailwind.
-             Belt-and-suspenders: hide any remaining layout chrome. */
-          aside, nav { display: none !important; }
+          /* Hide ALL layout chrome: sidebar, nav, toolbar, layout top bar */
+          aside, nav, .rx-toolbar { display: none !important; }
+          header:not(.rx-header) { display: none !important; }
 
-          /* Toolbar (Back / Download / Print buttons) */
-          .rx-toolbar { display: none !important; }
+          /* Reset main content wrapper padding from sidebar */
+          div[class*="lg:pl-"] { padding-left: 0 !important; }
 
-          /* Reset screen card styles for clean A4 */
+          /* Clean A4 sheet — no fixed positioning */
           .rx-screen-card {
             box-shadow: none !important;
             margin: 0 !important;
@@ -230,33 +244,6 @@ export default function PrintPrescriptionPage() {
             border: none !important;
             width: 210mm !important;
             min-height: 297mm !important;
-          }
-
-          /* Header: fixed to top of every printed page */
-          .rx-header {
-            position: fixed;
-            top: 10mm; left: 15mm; right: 15mm;
-            background: white;
-            z-index: 100;
-            padding-bottom: 3mm;
-          }
-
-          /* Body: leave gap for fixed header (top) and fixed footer (bottom) */
-          .rx-body-wrap {
-            margin-top: 56mm !important;
-            padding: 0 15mm 0 !important;
-            /* bottom padding = space for the fixed footer band */
-            padding-bottom: 34mm !important;
-          }
-
-          /* Footer: fixed to bottom of every printed page */
-          .rx-footer {
-            position: fixed;
-            bottom: 0; left: 0; right: 0;
-            background: white;
-            z-index: 100;
-            padding: 3mm 15mm 6mm;
-            border-top: 1px solid #e2e8f0;
           }
 
           tr          { page-break-inside: avoid; }
