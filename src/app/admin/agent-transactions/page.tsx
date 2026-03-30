@@ -18,7 +18,7 @@ import { supabase } from "@/lib/supabase";
 interface Txn { id: number; reason: string; status: string; txn_id: string; booking_id: string | null; user_id: string; user_name: string | null; user_email: string | null; amount: string; balance: string; started_on: string; created_at?: string; }
 
 const inr = (v: number) => `₹${v.toLocaleString("en-IN")}`;
-const fmtDate = (d: string) => { try { return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); } catch { return d; } };
+const fmtDate = (d: string) => { try { return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }); } catch { return d; } };
 const SC: Record<string, { icon: typeof Check; cls: string }> = {
   completed: { icon: Check, cls: "text-emerald-700 bg-emerald-50 border-emerald-200" },
   success:   { icon: Check, cls: "text-emerald-700 bg-emerald-50 border-emerald-200" },

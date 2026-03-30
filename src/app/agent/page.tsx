@@ -198,7 +198,7 @@ export default function AgentDashboard() {
     })();
   }, []);
 
-  const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
 
   if (loading) {
     return <div className="flex items-center justify-center py-24"><Loader className="h-8 w-8 animate-spin text-orange-500" /></div>;

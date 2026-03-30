@@ -61,7 +61,7 @@ export default function AttendantDashboard() {
     return () => clearInterval(iv);
   }, [fetchDashboard]);
 
-  const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
 
   if (loading) {
     return (

@@ -72,13 +72,14 @@ export async function GET() {
 
 /**
  * POST /api/admin/wallet
- * Add money to an agent's wallet.
- * Body: { agent_id (INT from agents table), user_id (profile UUID), amount, reason? }
+ * Add or deduct money from an agent's wallet.
+ * Body: { agent_id (INT from agents table), user_id (profile UUID), amount, reason?, action?: "credit" | "debit" }
  */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { agent_id, user_id, amount, reason } = body;
+    const { agent_id, user_id, amount, reason, action } = body;
+    const isDebit = action === "debit";
 
     if (!agent_id || !amount || Number(amount) <= 0) {
       return NextResponse.json({ error: "agent_id and a positive amount are required" }, { status: 400 });
@@ -99,12 +100,19 @@ export async function POST(req: NextRequest) {
     }
 
     const currentBalance = Number(agentRow.wallet_balance) || 0;
-    const newBalance = currentBalance + numAmount;
+
+    // For debit: check sufficient balance
+    if (isDebit && currentBalance < numAmount) {
+      return NextResponse.json({ error: `Insufficient balance. Current: ₹${currentBalance}, Requested deduction: ₹${numAmount}` }, { status: 400 });
+    }
+
+    const newBalance = isDebit ? currentBalance - numAmount : currentBalance + numAmount;
 
     // 2. Update wallet balance
+    const istNow = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Kolkata" }).replace(" ", "T");
     const { error: updateErr } = await admin
       .from("agents")
-      .update({ wallet_balance: newBalance, updated_at: new Date().toISOString() })
+      .update({ wallet_balance: newBalance, updated_at: istNow })
       .eq("id", Number(agent_id));
 
     if (updateErr) {
@@ -137,11 +145,11 @@ export async function POST(req: NextRequest) {
       user_id: profileId ? String(profileId) : String(agent_id),
       user_name: profileName,
       user_email: profileEmail,
-      reason: reason || "Admin Wallet Top-up",
-      amount: numAmount,
+      reason: reason || (isDebit ? "Admin Wallet Deduction" : "Admin Wallet Top-up"),
+      amount: isDebit ? -numAmount : numAmount,
       balance: newBalance,
       status: "completed",
-      started_on: new Date().toISOString().split("T")[0],
+      started_on: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
     });
 
     if (txnErr) {

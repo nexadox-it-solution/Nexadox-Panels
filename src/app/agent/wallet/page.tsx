@@ -181,7 +181,16 @@ export default function WalletPage() {
               toast({ title: "Top Up Successful!", description: `${inr(amount)} has been added to your wallet.` });
               setTopUpAmount("");
               setShowTopUpModal(false);
-              fetchWallet(); // Refresh data
+              /* Optimistic UI update — update balance immediately */
+              setWalletData(prev => ({
+                ...prev,
+                balance: prev.balance + amount,
+                totalTopUps: prev.totalTopUps + amount,
+              }));
+              /* Also dispatch a custom event so the sidebar refreshes */
+              window.dispatchEvent(new Event("nexadox-wallet-updated"));
+              /* Then do a full refresh in background */
+              fetchWallet();
             } else {
               throw new Error(verifyData.error || "Verification failed");
             }
@@ -378,7 +387,7 @@ export default function WalletPage() {
                   return (
                     <tr key={txn.id} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                       <td className="py-3 px-4 text-sm">
-                        {txn.created_at ? new Date(txn.created_at).toLocaleString("en-IN") : "—"}
+                        {txn.created_at ? new Date(txn.created_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}
                       </td>
                       <td className="py-3 px-4 text-sm">{txn.reason || "—"}</td>
                       <td className="py-3 px-4">

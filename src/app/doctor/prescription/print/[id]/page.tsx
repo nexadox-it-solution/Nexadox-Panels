@@ -41,7 +41,7 @@ const calcAge = (dob: string | null) => {
 
 const fmtDate = (d: string | null) => {
   if (!d) return "—";
-  try { return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }); } catch { return d; }
+  try { return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }); } catch { return d; }
 };
 
 /* ─── Component ─────────────────────────────────────────────── */
@@ -75,13 +75,15 @@ export default function PrintPrescriptionPage() {
   const [patientPhone,    setPatientPhone   ] = useState("");
   const [appointmentDate, setAppointmentDate] = useState("");
   const [patientType,     setPatientType    ] = useState("");
+  const [patientUhid,     setPatientUhid    ] = useState("");
 
   /* Prescription */
-  const [complaint, setComplaint] = useState("");
-  const [diagnosis, setDiagnosis] = useState("");
-  const [notes,     setNotes    ] = useState("");
-  const [medicines, setMedicines] = useState<Medicine[]>([]);
-  const [tests,     setTests    ] = useState<TestItem[]>([]);
+  const [complaint,          setComplaint         ] = useState("");
+  const [diagnosis,          setDiagnosis         ] = useState("");
+  const [notes,              setNotes             ] = useState("");
+  const [medicines,          setMedicines         ] = useState<Medicine[]>([]);
+  const [tests,              setTests             ] = useState<TestItem[]>([]);
+  const [prescriptionNumber, setPrescriptionNumber] = useState("");
 
   /* Vitals */
   const [vitals, setVitals] = useState<{
@@ -104,6 +106,11 @@ export default function PrintPrescriptionPage() {
       setPatientPhone(apt.patient_phone || "");
       setAppointmentDate(apt.appointment_date || "");
       setPatientType(apt.consultation_type || "");
+
+      // UHID from patient_id
+      if (apt.patient_id) {
+        setPatientUhid(`UHID${String(apt.patient_id).padStart(8, '0')}`);
+      }
 
       if (apt.doctor_id) {
         const { data: doc } = await supabase
@@ -146,6 +153,7 @@ export default function PrintPrescriptionPage() {
       setNotes(rx.notes || "");
       setMedicines((rx.medicines as Medicine[]) || []);
       setTests((rx.tests as TestItem[]) || []);
+      if (rx.prescription_number) setPrescriptionNumber(rx.prescription_number);
     } catch (e: any) {
       setError(e.message || "Failed to load");
     } finally {
@@ -347,10 +355,16 @@ export default function PrintPrescriptionPage() {
               {patientAge != null ? `${patientAge} yrs` : "—"}
               {patientGender && <span className="capitalize"> / {patientGender}</span>}
             </div>
+            {patientUhid && (
+              <div><span className="font-semibold text-gray-700">UHID No.:</span> <span className="font-mono">{patientUhid}</span></div>
+            )}
             <div className="flex flex-wrap gap-4">
               {patientPhone && <span><span className="font-semibold text-gray-700">Phone:</span> {patientPhone}</span>}
               {patientType  && <span><span className="font-semibold text-gray-700">Type:</span> {patientType}</span>}
             </div>
+            {prescriptionNumber && (
+              <div><span className="font-semibold text-gray-700">Prescription No.:</span> <span className="font-mono font-semibold" style={{ color: BRAND }}>{prescriptionNumber}</span></div>
+            )}
           </div>
 
           {/* Vitals bar */}

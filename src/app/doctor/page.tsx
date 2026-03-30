@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { todayIST } from "@/lib/utils";
 
 /* ─── Mini Bar Chart (pure SVG) ────────────────────────── */
 function BarChart({ data, color = "#3b82f6" }: { data: { label: string; value: number }[]; color?: string }) {
@@ -102,8 +103,8 @@ export default function DoctorDashboard() {
   const [allAppts, setAllAppts] = useState<Apt[]>([]);
   const [queueItems, setQueueItems] = useState<Apt[]>([]);
 
-  const todayStr = new Date().toISOString().split("T")[0];
-  const todayLabel = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const todayStr = todayIST();
+  const todayLabel = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
 
   useEffect(() => {
     (async () => {

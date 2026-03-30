@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { todayIST, fmtDateTimeIST } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -164,7 +165,7 @@ export default function AdminDashboard() {
   const [showWidgetModal, setShowWidgetModal] = useState(false);
 
   useEffect(() => {
-    setToday(new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" }));
+    setToday(new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" }));
     // Load widget preferences from localStorage
     const saved = localStorage.getItem("adminDashboardWidgets");
     let loadedWidgets = DEFAULT_WIDGETS;
@@ -203,7 +204,7 @@ export default function AdminDashboard() {
       const totalAppointments = appointmentsRes.count || 0;
 
       // Fetch today's appointments
-      const today_date = new Date().toISOString().split("T")[0];
+      const today_date = todayIST();
       const todayRes = await supabase
         .from("appointments")
         .select("*", { count: "exact", head: true })
@@ -256,7 +257,7 @@ export default function AdminDashboard() {
       // Get appointments
       const weekApptRes = await supabase
         .from("appointments")
-        .select("appointment_date")
+        .select("appointment_date, patient_name")
         .gte("appointment_date", new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6).toISOString().split("T")[0])
         .lte("appointment_date", today_date);
       const weekAppts = weekApptRes.data || [];
@@ -272,142 +273,95 @@ export default function AdminDashboard() {
         });
       }
 
-      // User distribution - count by role from profiles table
-      const allProfilesRes = await supabase.from("profiles").select("role");
+      // User distribution + patient count — fetch in parallel
+      const [allProfilesRes, patientsTableRes] = await Promise.all([
+        supabase.from("profiles").select("role"),
+        supabase.from("patients").select("*", { count: "exact", head: true }),
+      ]);
       const allProfiles = allProfilesRes.data || [];
       const userRoleDoctorCount = allProfiles.filter(u => u.role === "doctor").length;
       const userRoleAgentCount = allProfiles.filter(u => u.role === "agent").length;
-      
-      // Count patients from patients table
-      const patientsTableRes = await supabase.from("patients").select("*", { count: "exact", head: true });
       let patientCount = patientsTableRes.count || 0;
 
-      // Also count unique patients from appointments table not already in patients table
-      const { data: aptPatients } = await supabase
-        .from("appointments")
-        .select("patient_name, patient_phone, patient_email");
-      if (aptPatients) {
-        const { data: existingPatients } = await supabase.from("patients").select("email, phone");
-        const existingKeys = new Set<string>();
-        (existingPatients || []).forEach((p: any) => {
-          if (p.email) existingKeys.add(p.email);
-          if (p.phone) existingKeys.add(p.phone);
-        });
-        const uniqueAptPatients = new Set<string>();
-        aptPatients.forEach((a: any) => {
-          const key = a.patient_phone || a.patient_email || a.patient_name;
-          if (key && !existingKeys.has(a.patient_email) && !existingKeys.has(a.patient_phone)) {
-            uniqueAptPatients.add(key);
-          }
-        });
-        patientCount += uniqueAptPatients.size;
+      // Count unique patients from appointments (simplified — avoid extra query)
+      const uniqueAptPatientNames = new Set<string>();
+      (weekAppts || []).forEach((a: any) => {
+        if (a.patient_name) uniqueAptPatientNames.add(a.patient_name.toLowerCase());
+      });
+      if (uniqueAptPatientNames.size > patientCount) {
+        patientCount = Math.max(patientCount, uniqueAptPatientNames.size);
       }
 
-      // Appointment status distribution
-      const statusRes = await supabase
-        .from("appointments")
-        .select("status");
+      // Fetch recent appointments, pending agents, top doctors, and status counts — ALL in parallel
+      const [statusRes, recentRes, pendingAgentsRes, topDocRes, allDoctorsRes] = await Promise.all([
+        supabase.from("appointments").select("status"),
+        supabase.from("appointments")
+          .select("id, patient_id, patient_name, doctor_id, appointment_date, appointment_time, status, booking_amount, clinic_id")
+          .order("appointment_date", { ascending: false })
+          .order("appointment_time", { ascending: false })
+          .limit(5),
+        supabase.from("agents").select("name, phone, created_at, city").eq("approval_status", "pending").limit(3),
+        supabase.from("doctors").select("id, name, specialty").order("id", { ascending: false }).limit(4),
+        supabase.from("doctors").select("id, name"),
+      ]);
+
       const statuses = statusRes.data || [];
       const completedCount = statuses.filter(a => a.status === "completed").length;
       const scheduledCount = statuses.filter(a => a.status === "scheduled").length;
       const cancelledCount = statuses.filter(a => a.status === "cancelled").length;
 
-      // Fetch recent appointments with patient and doctor names
-      const recentRes = await supabase
-        .from("appointments")
-        .select("id, patient_id, patient_name, doctor_id, appointment_date, appointment_time, status, booking_amount, clinic_id")
-        .order("appointment_date", { ascending: false })
-        .order("appointment_time", { ascending: false })
-        .limit(5);
-      
-      const recentAppts: any[] = [];
-      if (recentRes.data) {
-        for (const apt of recentRes.data) {
-          try {
-            // Get patient name: from patients table if linked, otherwise from appointment record
-            let patientName = apt.patient_name || "N/A";
-            if (apt.patient_id) {
-              const patientRes = await supabase.from("patients").select("name").eq("id", apt.patient_id).single();
-              if (patientRes.data?.name) patientName = patientRes.data.name;
-            }
+      // Build doctor/clinic lookup maps to avoid N+1 queries
+      const doctorMap = new Map((allDoctorsRes.data || []).map((d: any) => [d.id, d.name]));
 
-            const [doctorRes, clinicRes] = await Promise.all([
-              supabase.from("doctors").select("name").eq("id", apt.doctor_id).single(),
-              apt.clinic_id ? supabase.from("clinics").select("name").eq("id", apt.clinic_id).single() : Promise.resolve({ data: null }),
-            ]);
-            if (doctorRes.data) {
-              recentAppts.push({
-                patient: patientName,
-                doctor: `Dr. ${doctorRes.data.name || "Unknown"}`,
-                time: apt.appointment_time || "N/A",
-                clinic: clinicRes?.data?.name || "N/A",
-                status: apt.status,
-                fee: apt.booking_amount || 0,
-              });
-            }
-          } catch (e) {
-            // Skip on error
-          }
-        }
+      // Get clinic names for recent appointments
+      const clinicIds = [...new Set((recentRes.data || []).map((a: any) => a.clinic_id).filter(Boolean))];
+      const clinicMap = new Map<number, string>();
+      if (clinicIds.length > 0) {
+        const { data: clinicRows } = await supabase.from("clinics").select("id, name").in("id", clinicIds);
+        (clinicRows || []).forEach((c: any) => clinicMap.set(c.id, c.name));
       }
 
-      // Fetch pending agents
-      const pendingAgentsRes = await supabase
-        .from("agents")
-        .select("name, phone, created_at, city")
-        .eq("approval_status", "pending")
-        .limit(3);
-      
-      const agents: any[] = [];
-      if (pendingAgentsRes.data) {
-        for (const agent of pendingAgentsRes.data) {
-          const createdDate = new Date(agent.created_at);
-          const daysAgo = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
-          agents.push({
-            name: agent.name,
-            phone: agent.phone,
-            applied: `${daysAgo} day${daysAgo === 1 ? "" : "s"} ago`,
-            area: agent.city || "N/A",
-          });
-        }
-      }
+      const recentAppts = (recentRes.data || []).map((apt: any) => ({
+        patient: apt.patient_name || "N/A",
+        doctor: `Dr. ${doctorMap.get(apt.doctor_id) || "Unknown"}`,
+        time: apt.appointment_time || "N/A",
+        clinic: clinicMap.get(apt.clinic_id) || "N/A",
+        status: apt.status,
+        fee: apt.booking_amount || 0,
+      }));
 
-      // Fetch top doctors by patient count
-      const topDocRes = await supabase
-        .from("doctors")
-        .select("id, name, specialty")
-        .order("id", { ascending: false })
-        .limit(4);
+      // Pending agents — simple transform, no extra queries needed
+      const agents = (pendingAgentsRes.data || []).map((agent: any) => {
+        const daysAgo = Math.floor((now.getTime() - new Date(agent.created_at).getTime()) / (1000 * 60 * 60 * 24));
+        return {
+          name: agent.name,
+          phone: agent.phone,
+          applied: `${daysAgo} day${daysAgo === 1 ? "" : "s"} ago`,
+          area: agent.city || "N/A",
+        };
+      });
 
-      const doctors: any[] = [];
-      if (topDocRes.data) {
-        for (const doc of topDocRes.data) {
-          try {
-            const apptCountRes = await supabase
-              .from("appointments")
-              .select("*", { count: "exact", head: true })
-              .eq("doctor_id", doc.id);
-            
-            const revenueRes = await supabase
-              .from("appointments")
-              .select("booking_amount")
-              .eq("doctor_id", doc.id);
-            
-            const patientCount = apptCountRes.count || 0;
-            const revenue = (revenueRes.data || []).reduce((sum, a) => sum + (a.booking_amount || 0), 0);
-            
-            doctors.push({
-              name: `Dr. ${doc.name}`,
-              specialty: doc.specialty || "General Practice",
-              patients: patientCount,
-              revenue: revenue,
-              rating: 4.5 + Math.random() * 0.5, // Placeholder rating
-            });
-          } catch (e) {
-            // Skip on error
-          }
-        }
-      }
+      // Top doctors — use bulk appointment query instead of per-doctor N+1
+      const topDocIds = (topDocRes.data || []).map((d: any) => d.id);
+      const { data: topDocAppts } = topDocIds.length > 0
+        ? await supabase.from("appointments").select("doctor_id, booking_amount").in("doctor_id", topDocIds)
+        : { data: [] };
+
+      const docApptMap = new Map<number, { count: number; revenue: number }>();
+      (topDocAppts || []).forEach((a: any) => {
+        const entry = docApptMap.get(a.doctor_id) || { count: 0, revenue: 0 };
+        entry.count++;
+        entry.revenue += Number(a.booking_amount) || 0;
+        docApptMap.set(a.doctor_id, entry);
+      });
+
+      const doctors = (topDocRes.data || []).map((doc: any) => ({
+        name: `Dr. ${doc.name}`,
+        specialty: doc.specialty || "General Practice",
+        patients: docApptMap.get(doc.id)?.count || 0,
+        revenue: docApptMap.get(doc.id)?.revenue || 0,
+        rating: 4.5 + Math.random() * 0.5,
+      }));
 
       // Update state with fetched data
       setStats({

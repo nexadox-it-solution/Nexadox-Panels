@@ -52,9 +52,8 @@ export default function AgentLayout({ children }: AgentLayoutProps) {
   });
 
   useEffect(() => {
-    (async () => {
+    const fetchWalletData = async () => {
       try {
-        /* Use the server API to get wallet data (bypasses RLS) */
         const session = localStorage.getItem("nexadox-session") || "";
         const userId = session.split(":")[0];
         const url = userId ? `/api/agent/wallet?userId=${userId}` : `/api/agent/wallet`;
@@ -69,7 +68,12 @@ export default function AgentLayout({ children }: AgentLayoutProps) {
           commissionRate: Number(data.agent?.commission_value) || 30,
         });
       } catch (e) { /* use defaults */ }
-    })();
+    };
+    fetchWalletData();
+    /* Re-fetch when wallet is updated (e.g. after successful top-up) */
+    const onWalletUpdated = () => fetchWalletData();
+    window.addEventListener("nexadox-wallet-updated", onWalletUpdated);
+    return () => window.removeEventListener("nexadox-wallet-updated", onWalletUpdated);
   }, []);
 
   if (!authenticated) {

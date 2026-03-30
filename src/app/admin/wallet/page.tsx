@@ -44,10 +44,11 @@ export default function AdminWalletPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  // Add money form
+  // Add/Deduct money form
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
+  const [walletAction, setWalletAction] = useState<"credit" | "debit">("credit");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -82,6 +83,12 @@ export default function AdminWalletPage() {
       return;
     }
 
+    // Check balance for deduction
+    if (walletAction === "debit" && Number(amount) > agent.wallet_balance) {
+      setMessage({ type: "error", text: `Insufficient balance. ${agent.name}'s current balance: ${inr(agent.wallet_balance)}` });
+      return;
+    }
+
     setSubmitting(true);
     setMessage(null);
 
@@ -93,7 +100,8 @@ export default function AdminWalletPage() {
           agent_id: agent.agent_id,
           user_id: agent.user_id,
           amount: Number(amount),
-          reason: reason.trim() || "Admin Wallet Top-up",
+          reason: reason.trim() || (walletAction === "debit" ? "Admin Wallet Deduction" : "Admin Wallet Top-up"),
+          action: walletAction,
         }),
       });
 
@@ -106,11 +114,14 @@ export default function AdminWalletPage() {
 
       setMessage({
         type: "success",
-        text: `Successfully added ${inr(Number(amount))} to ${agent.name}'s wallet. Txn: ${json.txn_id}`,
+        text: walletAction === "debit"
+          ? `Successfully deducted ${inr(Number(amount))} from ${agent.name}'s wallet. Txn: ${json.txn_id}`
+          : `Successfully added ${inr(Number(amount))} to ${agent.name}'s wallet. Txn: ${json.txn_id}`,
       });
       setAmount("");
       setReason("");
       setSelectedAgentId("");
+      setWalletAction("credit");
       loadAgents(); // Refresh balances
     } catch (err: any) {
       setMessage({ type: "error", text: err?.message || "Something went wrong" });
@@ -145,7 +156,7 @@ export default function AdminWalletPage() {
         <div>
           <h1 className="text-2xl font-bold">Wallet Management</h1>
           <p className="text-sm text-muted-foreground">
-            Add money to agent wallets
+            Add or deduct money from agent wallets
           </p>
         </div>
       </div>
@@ -194,9 +205,24 @@ export default function AdminWalletPage() {
       {/* Add Money Form */}
       <Card className="p-5">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Plus className="h-5 w-5 text-emerald-600" /> Add Money to Agent Wallet
+          <Plus className="h-5 w-5 text-emerald-600" /> Manage Agent Wallet
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">
+              Action
+            </label>
+            <Select value={walletAction} onValueChange={(v) => setWalletAction(v as "credit" | "debit")}>
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="credit">➕ Add Money</SelectItem>
+                <SelectItem value="debit">➖ Deduct Money</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">
               Select Agent
@@ -246,14 +272,16 @@ export default function AdminWalletPage() {
             <Button
               onClick={handleAddMoney}
               disabled={submitting || !selectedAgentId || !amount}
-              className="h-9 w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+              className={`h-9 w-full text-white ${walletAction === "debit" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}
             >
               {submitting ? (
                 <Loader className="h-4 w-4 animate-spin mr-2" />
+              ) : walletAction === "debit" ? (
+                <X className="h-4 w-4 mr-2" />
               ) : (
                 <Plus className="h-4 w-4 mr-2" />
               )}
-              Add Money
+              {walletAction === "debit" ? "Deduct Money" : "Add Money"}
             </Button>
           </div>
         </div>

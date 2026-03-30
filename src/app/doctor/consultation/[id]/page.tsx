@@ -24,6 +24,7 @@ interface Appointment {
   patient_phone: string | null;
   patient_dob: string | null;
   patient_gender: string | null;
+  patient_id: number | null;
   doctor_id: number | null;
   clinic_id: number | null;
   appointment_date: string;
@@ -85,12 +86,12 @@ const calcAge = (dob: string | null) => {
 
 const fmtDate = (d: string | null) => {
   if (!d) return "—";
-  try { return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }); } catch { return d; }
+  try { return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }); } catch { return d; }
 };
 
 const fmtTime = (iso: string | null) => {
   if (!iso) return "—";
-  try { return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }); } catch { return "—"; }
+  try { return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" }); } catch { return "—"; }
 };
 
 const emptyMedicine = (): Medicine => ({ type: "", name: "", composition: "", dosage: "", frequency: "", duration: "", instructions: "" });
@@ -191,10 +192,23 @@ export default function ConsultationPage() {
       const filteredMeds = rx.medicines.filter(m => m.name.trim());
       const filteredTests = rx.tests.filter(t => t.name.trim());
 
+      // Get prescription number for new prescriptions
+      let prescriptionNumber: string | null = null;
+      if (!existingRxId) {
+        try {
+          const numRes = await fetch("/api/prescription-number");
+          if (numRes.ok) {
+            const numData = await numRes.json();
+            prescriptionNumber = numData.prescription_number;
+          }
+        } catch { /* proceed without number if API fails */ }
+      }
+
       const basePayload: Record<string, any> = {
         appointment_id: apt.id,
         doctor_id: apt.doctor_id,
         patient_name: apt.patient_name,
+        patient_id: apt.patient_id || null,
         diagnosis: rx.diagnosis.trim(),
         notes: rx.notes.trim() || null,
         medicines: filteredMeds,
@@ -202,26 +216,29 @@ export default function ConsultationPage() {
         follow_up_date: null,
       };
 
-      // Include complaint if column exists (added by migration)
-      const payloadWithComplaint = { ...basePayload, complaint: rx.complaint.trim() || null };
-
-      const trySave = async (payload: Record<string, any>) => {
-        if (existingRxId) {
-          const { error: err } = await supabase.from("prescriptions").update(payload).eq("id", existingRxId);
-          return err;
-        } else {
-          const { data, error: err } = await supabase.from("prescriptions").insert(payload).select("id").single();
-          if (!err && data) setExistingRxId(data.id);
-          return err;
-        }
-      };
-
-      // Try with complaint first; if column missing (42703), retry without
-      let saveErr = await trySave(payloadWithComplaint);
-      if (saveErr?.code === "42703") {
-        saveErr = await trySave(basePayload);
+      // Add prescription_number only for new prescriptions
+      if (prescriptionNumber && !existingRxId) {
+        basePayload.prescription_number = prescriptionNumber;
       }
-      if (saveErr) throw saveErr;
+
+      // Include complaint if column exists (added by migration)
+      const fullPayload = { ...basePayload, complaint: rx.complaint.trim() || null, existingRxId };
+
+      // Save via server API (bypasses RLS)
+      const saveRes = await fetch("/api/prescriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fullPayload),
+      });
+      const saveData = await saveRes.json();
+
+      if (!saveRes.ok || saveData.error) {
+        throw new Error(saveData.error || "Failed to save prescription");
+      }
+
+      if (saveData.id && !existingRxId) {
+        setExistingRxId(saveData.id);
+      }
 
       /* Auto-save new values to lookup tables (fire-and-forget) */
       const saveToLookup = (table: string, values: string[]) => {
@@ -263,7 +280,7 @@ export default function ConsultationPage() {
     try {
       const { error: err } = await supabase.from("appointments").update({
         checkin_status: "completed",
-        completion_time: new Date().toISOString(),
+        completion_time: new Date().toLocaleString("sv-SE", { timeZone: "Asia/Kolkata" }).replace(" ", "T"),
         status: "completed",
       }).eq("id", apt.id);
 

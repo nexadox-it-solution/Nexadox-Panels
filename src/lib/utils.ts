@@ -28,6 +28,49 @@ export function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
+/* ─── IST Timezone Helpers (Asia/Kolkata) ──────────────────── */
+const IST_TZ = "Asia/Kolkata";
+
+/** Get current date-time in IST */
+export function nowIST(): Date {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: IST_TZ }));
+}
+
+/** Get today's date string (YYYY-MM-DD) in IST */
+export function todayIST(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: IST_TZ }); // en-CA gives YYYY-MM-DD
+}
+
+/** Format an ISO date/datetime to IST date string */
+export function fmtDateIST(d: string | null | undefined): string {
+  if (!d) return "—";
+  try {
+    const date = d.includes("T") ? new Date(d) : new Date(d + "T00:00:00");
+    return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: IST_TZ });
+  } catch { return d; }
+}
+
+/** Format an ISO datetime to IST time string */
+export function fmtTimeIST(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: IST_TZ });
+  } catch { return "—"; }
+}
+
+/** Format an ISO datetime to full IST date+time string */
+export function fmtDateTimeIST(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("en-IN", { timeZone: IST_TZ });
+  } catch { return "—"; }
+}
+
+/** Get IST ISO string for database writes */
+export function isoNowIST(): string {
+  return new Date().toLocaleString("sv-SE", { timeZone: IST_TZ }).replace(" ", "T");
+}
+
 /**
  * Generate time slots for appointments
  */
