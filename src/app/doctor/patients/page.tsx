@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -86,6 +87,7 @@ interface DoctorInfo {
 
 /* ─── Component ─────────────────────────────────────────────── */
 export default function PatientsPage() {
+  const router = useRouter();
   const supabase = createClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<PatientRecord | null>(null);
@@ -606,7 +608,7 @@ export default function PatientsPage() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => window.open(`/doctor/prescription/print/${record.id}`, "_blank")}
+                                onClick={() => router.push(`/doctor/prescription/print/${record.id}`)}
                                 className="gap-1 text-xs h-7 text-green-700 border-green-300 hover:bg-green-50"
                               >
                                 <Eye className="h-3 w-3" /> View Rx
