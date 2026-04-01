@@ -96,8 +96,6 @@ export default function PatientsPage() {
 
   /* Prescription state */
   const [prescriptions, setPrescriptions] = useState<Map<number, PrescriptionRow>>(new Map());
-  const [viewingRx, setViewingRx] = useState<PrescriptionRow | null>(null);
-  const [viewingApt, setViewingApt] = useState<AppointmentRecord | null>(null);
   const [doctorInfo, setDoctorInfo] = useState<DoctorInfo | null>(null);
   const [specialtyNames, setSpecialtyNames] = useState<string[]>([]);
   const [degreeNames, setDegreeNames] = useState<string[]>([]);
@@ -108,7 +106,6 @@ export default function PatientsPage() {
   const [viewingManualRx, setViewingManualRx] = useState<{ url: string; patientName: string; date: string; aptId: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTargetAptId, setUploadTargetAptId] = useState<number | null>(null);
-  const rxRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     (async () => {
@@ -229,27 +226,7 @@ export default function PatientsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ── Download prescription as PDF ─────────────────────────── */
-  const downloadPrescriptionPDF = async () => {
-    if (!rxRef.current) return;
-    setDownloading(true);
-    try {
-      const html2pdf = (await import("html2pdf.js")).default;
-      const element = rxRef.current;
-      const patientName = viewingRx?.patient_name || "Patient";
-      const date = viewingApt?.appointment_date || new Date().toISOString().split("T")[0];
-      const fileName = `Prescription_${patientName.replace(/\s+/g, "_")}_${date}.pdf`;
 
-      await html2pdf().set({
-        margin: [0.3, 0.3, 0.3, 0.3],
-        filename: fileName,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: "in", format: "a4", orientation: "portrait" },
-      }).from(element).save();
-    } catch (e) { console.error("PDF download failed:", e); }
-    finally { setDownloading(false); }
-  };
 
   /* ── Upload manual prescription image ─────────────────────── */
   const handleUploadManualRx = async (aptId: number, patientName: string) => {
@@ -433,276 +410,6 @@ export default function PatientsPage() {
               className="max-w-full rounded-lg border shadow-sm"
               style={{ maxHeight: "800px" }}
             />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  /* ─── Prescription View (full-page style) ──────────────────── */
-  if (viewingRx && viewingApt) {
-    const clinicName = viewingApt.clinic_id ? clinicMap.get(viewingApt.clinic_id) : null;
-    const vitals = vitalsMap.get(viewingApt.id);
-    const calcAge = (dob: string | null) => {
-      if (!dob) return null;
-      const birth = new Date(dob);
-      const today = new Date();
-      let age = today.getFullYear() - birth.getFullYear();
-      const m = today.getMonth() - birth.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-      return age;
-    };
-    const patientAge = calcAge(viewingApt.patient_dob);
-    // Calculate visit number for this patient
-    const patientKey = viewingRx.patient_name.toLowerCase();
-    const allPatientApts = patients.find(p => p.name.toLowerCase() === patientKey)?.appointments || [];
-    const sortedApts = [...allPatientApts].sort((a, b) => a.appointment_date.localeCompare(b.appointment_date));
-    const visitNo = sortedApts.findIndex(a => a.id === viewingApt.id) + 1;
-
-    return (
-      <div className="space-y-4 max-w-4xl mx-auto">
-        {/* Action Bar */}
-        <div className="flex items-center justify-between">
-          <Button variant="ghost" onClick={() => { setViewingRx(null); setViewingApt(null); }} className="gap-2">
-            <ArrowLeft className="h-4 w-4" /> Back to Patient Records
-          </Button>
-          <Button
-            onClick={() => window.open(`/doctor/prescription/print/${viewingRx?.appointment_id}`, "_blank")}
-            className="gap-2 text-white"
-            style={{ backgroundColor: "#0D8EAD" }}
-          >
-            <Download className="h-4 w-4" /> View / Download PDF
-          </Button>
-        </div>
-
-        {/* Printable Prescription Card */}
-        <div ref={rxRef} className="bg-white border rounded-xl shadow-lg overflow-hidden" style={{ fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif", color: "#1e293b" }}>
-          {/* ── Header Band ── */}
-          <div style={{ background: "#0D8EAD", color: "#fff", padding: "24px 32px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div>
-                <h1 style={{ fontSize: "24px", fontWeight: 700, margin: 0, letterSpacing: "-0.5px" }}>
-                  NexaDox
-                </h1>
-                <p style={{ fontSize: "11px", margin: "4px 0 0", opacity: 0.85 }}>Doctor Appointment &amp; Clinic Management</p>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <p style={{ fontSize: "18px", fontWeight: 700, margin: 0 }}>{doctorInfo?.name || "Doctor"}</p>
-                {degreeNames.length > 0 && (
-                  <p style={{ fontSize: "12px", margin: "2px 0 0", opacity: 0.9 }}>{degreeNames.join(", ")}</p>
-                )}
-                {specialtyNames.length > 0 && (
-                  <p style={{ fontSize: "12px", margin: "2px 0 0", opacity: 0.85 }}>{specialtyNames.join(" | ")}</p>
-                )}
-                {doctorInfo?.mobile && (
-                  <p style={{ fontSize: "11px", margin: "4px 0 0", opacity: 0.8 }}>Ph: {doctorInfo.mobile}</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* ── Patient Info Bar ── */}
-          <div style={{ background: "#f1f5f9", padding: "14px 32px", borderBottom: "1px solid #e2e8f0" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
-              <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
-                <div>
-                  <span style={{ fontSize: "10px", textTransform: "uppercase", color: "#64748b", fontWeight: 600 }}>Patient Name</span>
-                  <p style={{ fontSize: "14px", fontWeight: 700, margin: "2px 0 0", color: "#1e293b" }}>{viewingRx.patient_name}</p>
-                </div>
-                {viewingApt.patient_gender && (
-                  <div>
-                    <span style={{ fontSize: "10px", textTransform: "uppercase", color: "#64748b", fontWeight: 600 }}>Sex</span>
-                    <p style={{ fontSize: "13px", fontWeight: 500, margin: "2px 0 0", color: "#1e293b" }}>{viewingApt.patient_gender}</p>
-                  </div>
-                )}
-                {patientAge !== null && (
-                  <div>
-                    <span style={{ fontSize: "10px", textTransform: "uppercase", color: "#64748b", fontWeight: 600 }}>Age</span>
-                    <p style={{ fontSize: "13px", fontWeight: 500, margin: "2px 0 0", color: "#1e293b" }}>{patientAge} yrs</p>
-                  </div>
-                )}
-                {visitNo > 0 && (
-                  <div>
-                    <span style={{ fontSize: "10px", textTransform: "uppercase", color: "#64748b", fontWeight: 600 }}>Visit No.</span>
-                    <p style={{ fontSize: "13px", fontWeight: 500, margin: "2px 0 0", color: "#1e293b" }}>{visitNo}</p>
-                  </div>
-                )}
-                {clinicName && (
-                  <div>
-                    <span style={{ fontSize: "10px", textTransform: "uppercase", color: "#64748b", fontWeight: 600 }}>Clinic</span>
-                    <p style={{ fontSize: "13px", fontWeight: 500, margin: "2px 0 0", color: "#1e293b" }}>{clinicName}</p>
-                  </div>
-                )}
-              </div>
-              <div style={{ display: "flex", gap: "24px", flexWrap: "wrap" }}>
-                <div>
-                  <span style={{ fontSize: "10px", textTransform: "uppercase", color: "#64748b", fontWeight: 600 }}>Date</span>
-                  <p style={{ fontSize: "13px", fontWeight: 500, margin: "2px 0 0", color: "#1e293b" }}>{fmtDate(viewingApt.appointment_date)}</p>
-                </div>
-                {viewingApt.slot && (
-                  <div>
-                    <span style={{ fontSize: "10px", textTransform: "uppercase", color: "#64748b", fontWeight: 600 }}>Slot</span>
-                    <p style={{ fontSize: "13px", fontWeight: 500, margin: "2px 0 0", color: "#1e293b" }}>{viewingApt.slot}</p>
-                  </div>
-                )}
-                {viewingApt.consultation_type && (
-                  <div>
-                    <span style={{ fontSize: "10px", textTransform: "uppercase", color: "#64748b", fontWeight: 600 }}>Type</span>
-                    <p style={{ fontSize: "13px", fontWeight: 500, margin: "2px 0 0", color: "#1e293b" }}>{viewingApt.consultation_type}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* ── Vitals Bar ── */}
-          {vitals && (
-            <div style={{ padding: "12px 32px", borderBottom: "1px solid #e2e8f0", background: "#fefce8" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                <Activity style={{ width: 14, height: 14, color: "#ca8a04" }} />
-                <h3 style={{ fontSize: "12px", fontWeight: 700, color: "#854d0e", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>Vitals</h3>
-              </div>
-              <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
-                {vitals.height != null && (
-                  <div style={{ display: "flex", gap: "4px", alignItems: "baseline" }}>
-                    <span style={{ fontSize: "11px", color: "#92400e", fontWeight: 600 }}>Height:</span>
-                    <span style={{ fontSize: "13px", fontWeight: 500, color: "#1e293b" }}>{vitals.height} cm</span>
-                  </div>
-                )}
-                {vitals.weight != null && (
-                  <div style={{ display: "flex", gap: "4px", alignItems: "baseline" }}>
-                    <span style={{ fontSize: "11px", color: "#92400e", fontWeight: 600 }}>Weight:</span>
-                    <span style={{ fontSize: "13px", fontWeight: 500, color: "#1e293b" }}>{vitals.weight} kg</span>
-                  </div>
-                )}
-                {vitals.bp && (
-                  <div style={{ display: "flex", gap: "4px", alignItems: "baseline" }}>
-                    <span style={{ fontSize: "11px", color: "#92400e", fontWeight: 600 }}>BP:</span>
-                    <span style={{ fontSize: "13px", fontWeight: 500, color: "#1e293b" }}>{vitals.bp} mmHg</span>
-                  </div>
-                )}
-                {vitals.pulse != null && (
-                  <div style={{ display: "flex", gap: "4px", alignItems: "baseline" }}>
-                    <span style={{ fontSize: "11px", color: "#92400e", fontWeight: 600 }}>Pulse:</span>
-                    <span style={{ fontSize: "13px", fontWeight: 500, color: "#1e293b" }}>{vitals.pulse} bpm</span>
-                  </div>
-                )}
-                {vitals.spo2 != null && (
-                  <div style={{ display: "flex", gap: "4px", alignItems: "baseline" }}>
-                    <span style={{ fontSize: "11px", color: "#92400e", fontWeight: 600 }}>SpO2:</span>
-                    <span style={{ fontSize: "13px", fontWeight: 500, color: "#1e293b" }}>{vitals.spo2}%</span>
-                  </div>
-                )}
-                {vitals.temperature != null && (
-                  <div style={{ display: "flex", gap: "4px", alignItems: "baseline" }}>
-                    <span style={{ fontSize: "11px", color: "#92400e", fontWeight: 600 }}>Temp:</span>
-                    <span style={{ fontSize: "13px", fontWeight: 500, color: "#1e293b" }}>{vitals.temperature}°F</span>
-                  </div>
-                )}
-                {vitals.bmi != null && (
-                  <div style={{ display: "flex", gap: "4px", alignItems: "baseline" }}>
-                    <span style={{ fontSize: "11px", color: "#92400e", fontWeight: 600 }}>BMI:</span>
-                    <span style={{ fontSize: "13px", fontWeight: 500, color: "#1e293b" }}>{vitals.bmi}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ── Body ── */}
-          <div style={{ padding: "24px 32px" }}>
-            {/* Diagnosis */}
-            <div style={{ marginBottom: "20px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                <Stethoscope style={{ width: 16, height: 16, color: "#3b82f6" }} />
-                <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#1e40af", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>Diagnosis</h3>
-              </div>
-              <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "12px 16px" }}>
-                <p style={{ fontSize: "14px", color: "#1e293b", margin: 0, lineHeight: 1.5 }}>{viewingRx.diagnosis}</p>
-              </div>
-            </div>
-
-            {/* Rx Symbol + Medicines */}
-            {viewingRx.medicines && viewingRx.medicines.length > 0 && viewingRx.medicines.some(m => m.name.trim()) && (
-              <div style={{ marginBottom: "20px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-                  <span style={{ fontSize: "22px", fontWeight: 800, color: "#16a34a", fontFamily: "serif", fontStyle: "italic" }}>&#8478;</span>
-                  <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#15803d", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>Medicines</h3>
-                </div>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
-                  <thead>
-                    <tr style={{ background: "#f0fdf4", borderBottom: "2px solid #86efac" }}>
-                      <th style={{ textAlign: "left", padding: "10px 12px", fontWeight: 600, color: "#166534" }}>#</th>
-                      <th style={{ textAlign: "left", padding: "10px 12px", fontWeight: 600, color: "#166534" }}>Medicine</th>
-                      <th style={{ textAlign: "left", padding: "10px 12px", fontWeight: 600, color: "#166534" }}>Dosage</th>
-                      <th style={{ textAlign: "left", padding: "10px 12px", fontWeight: 600, color: "#166534" }}>Frequency</th>
-                      <th style={{ textAlign: "left", padding: "10px 12px", fontWeight: 600, color: "#166534" }}>Duration</th>
-                      <th style={{ textAlign: "left", padding: "10px 12px", fontWeight: 600, color: "#166534" }}>Instructions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {viewingRx.medicines.filter(m => m.name.trim()).map((med, i) => (
-                      <tr key={i} style={{ borderBottom: "1px solid #e5e7eb" }}>
-                        <td style={{ padding: "10px 12px", color: "#6b7280" }}>{i + 1}</td>
-                        <td style={{ padding: "10px 12px", fontWeight: 600, color: "#1e293b" }}>{med.name}</td>
-                        <td style={{ padding: "10px 12px", color: "#374151" }}>{med.dosage || "—"}</td>
-                        <td style={{ padding: "10px 12px", color: "#374151", fontFamily: "monospace" }}>{med.frequency || "—"}</td>
-                        <td style={{ padding: "10px 12px", color: "#374151" }}>{med.duration || "—"}</td>
-                        <td style={{ padding: "10px 12px", color: "#6b7280", fontStyle: med.instructions ? "normal" : "italic" }}>{med.instructions || "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Lab Tests */}
-            {viewingRx.tests && viewingRx.tests.length > 0 && viewingRx.tests.some(t => t.name.trim()) && (
-              <div style={{ marginBottom: "20px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                  <ClipboardList style={{ width: 16, height: 16, color: "#d97706" }} />
-                  <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#b45309", margin: 0, textTransform: "uppercase", letterSpacing: "0.5px" }}>Lab Tests Advised</h3>
-                </div>
-                <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "12px 16px" }}>
-                  {viewingRx.tests.filter(t => t.name.trim()).map((test, i) => (
-                    <div key={i} style={{ display: "flex", gap: "8px", padding: "4px 0", alignItems: "baseline" }}>
-                      <span style={{ fontSize: "13px", fontWeight: 600, color: "#92400e" }}>{i + 1}.</span>
-                      <div>
-                        <span style={{ fontSize: "13px", fontWeight: 600, color: "#1e293b" }}>{test.name}</span>
-                        {test.instructions && <span style={{ fontSize: "12px", color: "#6b7280", marginLeft: "8px" }}>— {test.instructions}</span>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Notes */}
-            {viewingRx.notes && (
-              <div style={{ marginBottom: "20px" }}>
-                <h3 style={{ fontSize: "13px", fontWeight: 700, color: "#374151", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Notes / Advice</h3>
-                <p style={{ fontSize: "13px", color: "#4b5563", lineHeight: 1.6, margin: 0, background: "#f9fafb", padding: "10px 14px", borderRadius: "6px", borderLeft: "3px solid #9ca3af" }}>{viewingRx.notes}</p>
-              </div>
-            )}
-
-            {/* Follow-up */}
-            {viewingRx.follow_up_date && (
-              <div style={{ marginBottom: "16px" }}>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "#fef3c7", border: "1px solid #fbbf24", borderRadius: "8px", padding: "8px 16px" }}>
-                  <Calendar style={{ width: 14, height: 14, color: "#92400e" }} />
-                  <span style={{ fontSize: "13px", fontWeight: 600, color: "#92400e" }}>Follow-up: {fmtDate(viewingRx.follow_up_date)}</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ── Footer ── */}
-          <div style={{ borderTop: "1px solid #e2e8f0", padding: "16px 32px", background: "#f8fafc", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <p style={{ fontSize: "10px", color: "#94a3b8", margin: 0 }}>Generated on {new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })} &bull; NexaDox Platform</p>
-            <div style={{ textAlign: "right" }}>
-              <p style={{ fontSize: "13px", fontWeight: 600, color: "#1e293b", margin: 0 }}>{doctorInfo?.name}</p>
-              <p style={{ fontSize: "10px", color: "#94a3b8", margin: "2px 0 0" }}>Digital Signature</p>
-            </div>
           </div>
         </div>
       </div>
@@ -899,20 +606,10 @@ export default function PatientsPage() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => { setViewingRx(rx); setViewingApt(record); setSelectedPatient(null); }}
+                                onClick={() => window.open(`/doctor/prescription/print/${record.id}`, "_blank")}
                                 className="gap-1 text-xs h-7 text-green-700 border-green-300 hover:bg-green-50"
                               >
                                 <Eye className="h-3 w-3" /> View Rx
-                              </Button>
-                            )}
-                            {rx && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => { setViewingRx(rx); setViewingApt(record); setSelectedPatient(null); setTimeout(() => downloadPrescriptionPDF(), 500); }}
-                                className="gap-1 text-xs h-7 text-blue-700 border-blue-300 hover:bg-blue-50"
-                              >
-                                <Download className="h-3 w-3" /> PDF
                               </Button>
                             )}
                             {/* Manual Rx buttons */}
