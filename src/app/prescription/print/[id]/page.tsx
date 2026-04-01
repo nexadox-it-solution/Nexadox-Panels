@@ -241,10 +241,12 @@ export default function PrintPrescriptionPage() {
           aside, nav, .rx-toolbar { display: none !important; }
           header:not(.rx-header) { display: none !important; }
 
-          /* Reset main content wrapper padding from sidebar */
+          /* Reset ALL parent wrapper margins/padding from layout */
+          div[class*="lg:ml-"] { margin-left: 0 !important; }
           div[class*="lg:pl-"] { padding-left: 0 !important; }
+          main { padding: 0 !important; margin: 0 !important; }
 
-          /* Clean A4 sheet — no fixed positioning */
+          /* Clean A4 sheet — single page */
           .rx-screen-card {
             box-shadow: none !important;
             margin: 0 !important;
@@ -252,7 +254,14 @@ export default function PrintPrescriptionPage() {
             border: none !important;
             width: 210mm !important;
             min-height: 297mm !important;
+            max-height: 297mm !important;
+            overflow: hidden !important;
+            page-break-after: avoid !important;
           }
+
+          /* Compact spacing for print */
+          .rx-body-wrap { padding: 8mm 10mm 4mm !important; }
+          .rx-footer { padding: 2mm 10mm !important; }
 
           tr          { page-break-inside: avoid; }
           .rx-section { page-break-inside: avoid; }
@@ -498,7 +507,7 @@ export default function PrintPrescriptionPage() {
                 QR
               </div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/Nexadox.png" alt="Nexadox" style={{ height: 48 }} />
+              <img src="/Nexadox.png" alt="Nexadox" style={{ height: 56 }} />
             </div>
           </div>
         </div>
