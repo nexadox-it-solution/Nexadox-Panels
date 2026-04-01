@@ -449,7 +449,7 @@ export default function QueuePage() {
                               <Button size="sm" variant="outline" onClick={() => openCase(apt)} className="gap-1 text-blue-700 border-blue-300 hover:bg-blue-50">
                                 <FileText className="h-3.5 w-3.5" /> Edit Rx
                               </Button>
-                              <Button size="sm" variant="outline" onClick={() => router.push(`/prescription/print/${apt.id}`)} className="gap-1 text-green-700 border-green-300 hover:bg-green-50">
+                              <Button size="sm" variant="outline" onClick={() => router.push(`/doctor/prescription/print/${apt.id}`)} className="gap-1 text-green-700 border-green-300 hover:bg-green-50">
                                 <Printer className="h-3.5 w-3.5" /> Print Rx
                               </Button>
                             </>

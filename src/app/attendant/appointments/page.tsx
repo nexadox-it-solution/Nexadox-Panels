@@ -615,7 +615,7 @@ export default function AttendantAppointmentsPage() {
   /* ── Print/Download prescription — opens the canonical print page ── */
   const printPrescription = () => {
     if (!viewPrescription) return;
-    window.open(`/prescription/print/${viewPrescription.appointment_id}`, "_blank");
+    window.open(`/attendant/prescription/print/${viewPrescription.appointment_id}`, "_blank");
   };
 
   const statusColor: Record<string, string> = {
