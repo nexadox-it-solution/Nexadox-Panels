@@ -490,15 +490,15 @@ export default function PrintPrescriptionPage() {
             </div>
 
             {/* RIGHT — QR placeholder + Nexadox logo */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               <div
-                className="w-10 h-10 flex items-center justify-center text-[9px] text-gray-400 text-center leading-tight rounded"
+                className="w-16 h-16 flex items-center justify-center text-[10px] text-gray-400 text-center leading-tight rounded"
                 style={{ border: "1.5px dashed #ccc" }}
               >
                 QR
               </div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/Nexadox.png" alt="Nexadox" style={{ height: 28 }} />
+              <img src="/Nexadox.png" alt="Nexadox" style={{ height: 48 }} />
             </div>
           </div>
         </div>
