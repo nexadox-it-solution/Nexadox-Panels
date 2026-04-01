@@ -571,7 +571,7 @@ export default function AttendantPatientsPage() {
                               "bg-blue-100 text-blue-700"
                             }`}>{record.status}</span>
                             {rx && (
-                              <Button variant="outline" size="sm" onClick={() => router.push(`/doctor/prescription/print/${record.id}`)} className="gap-1 text-xs h-7 text-green-700 border-green-300 hover:bg-green-50">
+                              <Button variant="outline" size="sm" onClick={() => router.push(`/prescription/print/${record.id}`)} className="gap-1 text-xs h-7 text-green-700 border-green-300 hover:bg-green-50">
                                 <Eye className="h-3 w-3" /> View Rx
                               </Button>
                             )}
