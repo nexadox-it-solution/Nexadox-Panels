@@ -642,7 +642,7 @@ export async function PATCH(req: NextRequest) {
 /**
  * DELETE /api/admin/appointments
  * Bulk delete appointments only by date range or specific IDs.
- * Does NOT delete related vitals, prescriptions, queue records.
+ * Nullifies FK references in invoices before deleting.
  * Body: { ids?: number[], dateFrom?: string, dateTo?: string }
  */
 export async function DELETE(req: NextRequest) {
@@ -654,31 +654,43 @@ export async function DELETE(req: NextRequest) {
       dateTo?: string;
     };
 
+    const supabase = getSupabaseAdmin();
     let deletedCount = 0;
+    let appointmentIds: number[] = [];
 
     if (ids && ids.length > 0) {
-      const { data, error } = await getSupabaseAdmin()
-        .from("appointments")
-        .delete()
-        .in("id", ids)
-        .select("id");
-
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      deletedCount = data?.length || 0;
-
+      appointmentIds = ids;
     } else if (dateFrom && dateTo) {
-      const { data, error } = await getSupabaseAdmin()
+      // First, get appointment IDs in the date range
+      const { data: appts } = await supabase
         .from("appointments")
-        .delete()
+        .select("id")
         .gte("appointment_date", dateFrom)
-        .lte("appointment_date", dateTo)
-        .select("id");
-
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      deletedCount = data?.length || 0;
+        .lte("appointment_date", dateTo);
+      appointmentIds = appts?.map((a: any) => a.id) || [];
     } else {
       return NextResponse.json({ error: "Provide 'ids' array or 'dateFrom'+'dateTo' range." }, { status: 400 });
     }
+
+    if (appointmentIds.length === 0) {
+      return NextResponse.json({ success: true, deletedCount: 0 });
+    }
+
+    // Nullify FK references in invoices to avoid constraint violations
+    await supabase
+      .from("invoices")
+      .update({ appointment_id: null })
+      .in("appointment_id", appointmentIds);
+
+    // Now delete the appointments
+    const { data, error } = await supabase
+      .from("appointments")
+      .delete()
+      .in("id", appointmentIds)
+      .select("id");
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    deletedCount = data?.length || 0;
 
     return NextResponse.json({ success: true, deletedCount });
   } catch (err: any) {
