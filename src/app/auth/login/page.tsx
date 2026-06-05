@@ -8,7 +8,6 @@ import {
   Eye, EyeOff, Loader, AlertCircle,
   Calendar, Users, Shield, Clock
 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
 import {
   checkLoginBlocked,
   recordLoginAttempt,
@@ -75,50 +74,38 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // Direct Supabase auth — no API proxy
-      const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
+      // Call server-side login API (avoids browser CORS restrictions)
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password }),
       });
 
-      if (authErr) {
+      const data = await res.json();
+
+      if (!res.ok) {
         // Record failed attempt
         const attempt = recordLoginAttempt();
         if (attempt.blocked) {
           startCooldown(attempt.remainingSeconds);
           throw new Error(`Too many login attempts. Please wait ${attempt.remainingSeconds} seconds.`);
         }
-        throw authErr;
+        throw new Error(data.error || "Login failed. Check your credentials.");
       }
 
       // Login successful — clear attempt counter
       clearLoginAttempts();
 
-      const authId = authData.user.id;
+      const { userId: authId, role } = data as { userId: string; role: string };
 
-      // Fetch role from profiles table (single source of truth)
-      const { data: profile, error: profileErr } = await supabase
-        .from("profiles")
-        .select("role, status")
-        .eq("id", authId)
-        .single();
-
-      if (profileErr || !profile) {
-        throw new Error("User profile not found. Please contact support.");
-      }
-
-      if (profile.status === "inactive" || profile.status === "suspended") {
-        throw new Error("Your account has been deactivated. Please contact admin.");
-      }
-
-      const defaultRoute = ROLE_ROUTES[profile.role] ?? "/admin";
+      const defaultRoute = ROLE_ROUTES[role] ?? "/admin";
 
       // Read ?redirect= param
       const params = new URLSearchParams(window.location.search);
       const redirectTo = params.get("redirect") || defaultRoute;
 
       // Set session in localStorage (immune to Supabase token wipes)
-      setSession(authId, profile.role);
+      setSession(authId, role);
 
       window.location.replace(redirectTo);
     } catch (err: any) {
